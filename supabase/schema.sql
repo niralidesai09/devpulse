@@ -61,7 +61,7 @@ create table public.posts (
   pain_point        text,               -- one-line summary of the problem
   is_unresolved     boolean,
   unresolved_reason text,
-  sentiment         text check (sentiment in ('positive', 'neutral', 'negative')),
+  sentiment         numeric check (sentiment between -1 and 1), -- -1 very negative .. 1 very positive (Step 4)
   severity          smallint check (severity between 1 and 5),
   competitors       text[] not null default '{}',
   created_at        timestamptz not null default now(),

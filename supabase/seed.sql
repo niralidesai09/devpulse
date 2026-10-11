@@ -23,7 +23,9 @@ insert into public.topics (name, description, keywords) values
   -- (Step 3: plain "false positives" was removed: it matched unrelated posts
   --  about security scanners, cameras, etc. More specific phrases instead.)
   array['linter false positive', 'noisy bot comments', 'code review bot', 'static analysis false positive',
-        'sonarqube false positive', 'linter noise', 'review bot spam', 'bot review comments']
+        'sonarqube false positive', 'linter noise', 'review bot spam', 'bot review comments',
+        -- Step 4: had 0 matches, so widened (migration step4_numeric_sentiment_and_fp_keywords).
+        'false positive rate', 'too many false positives', 'AI review comments', 'nitpicks']
 ),
 (
   'CI/CD pipeline failures',

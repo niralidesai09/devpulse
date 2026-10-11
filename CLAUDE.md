@@ -66,6 +66,49 @@ NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_K
 6. Create a PUBLIC GitHub repo called devpulse using gh, commit, and push.
 7. Give the command to run it locally and what should be seen.
 
+## Roadmap (Steps 4–11)
+After EACH step: run it to verify with live data, commit + push, update Progress, explain simply, give a URL to check, 3 viva Q&As, then STOP and wait for "next".
+
+### Step 4 — Gemini classifier (lib/ai)
+- lib/ai/gemini.ts using @google/genai and GEMINI_MODEL. First list available models with the key and confirm the model name works; if not, switch to the newest available Flash model and say so.
+- Classify posts in batches of ~25 using JSON output with a response schema; validate with Zod; retry once on invalid JSON; back off and retry on 429 rate limits.
+- Per post: topic_id (or null if irrelevant — drop those), pain_point (one line), is_unresolved + reason (use source signals like no accepted answer / issue still open as evidence), sentiment (-1 to 1), severity 1-5, competitors mentioned (e.g. SonarQube, CodeRabbit, GitHub Copilot review, Graphite, Reviewable).
+- Debug endpoint /api/debug/classify (same protection as /api/debug/sources) showing results for 10 live posts.
+
+### Step 5 — Pipeline + trend engine (lib/pipeline)
+- runPipeline(): create a runs row, collect posts, classify, save posts, compute topic_stats, mark run done/failed, record per-source status.
+- Trend: this week's count per topic vs last week. SMART BASELINE: also fetch counts for the PREVIOUS 7-day window (days 8–14 ago) using keyword matching from sources that support date ranges. Use keyword-match counts for BOTH weeks so the comparison is fair. Show change % with ▲/▼ and "new" when last week was 0.
+- Opportunity Score (0-100) = normalised(mention count) × growth factor × unresolved ratio × avg severity. Store each component so the UI can show "why this score".
+- Fit Vercel's function time limit: maxDuration, limited Gemini parallelism, cap posts at 300.
+
+### Step 6 — The Friday brief + email
+- Gemini writes markdown: 1) TL;DR 3 bullets, 2) Top pain points table (topic, mentions, trend %, unresolved %, opportunity score), 3) Rising & falling, 4) Unresolved / underserved, 5) Emerging topics not yet monitored, 6) Competitor radar, 7) Likely sales objections + suggested response, 8) "Bring these 3 things to Monday sprint planning". Every claim links to real thread URLs. Never invent numbers — pass computed stats in, use only them.
+- Save to briefs; send clean HTML email via Resend (from onboarding@resend.dev) to BRIEF_TO_EMAIL; store emailed_at.
+
+### Step 7 — Dashboard, cron, deploy
+- "/" latest brief + KPI cards + week-over-week trend chart (Recharts) + topics ranked by opportunity score with evidence links; "/topics" add/edit/pause topics + keywords (ADMIN_PASSCODE; add to .env.example, generate in .env.local); "/runs" history with per-source status.
+- Protected "Run now" button (ADMIN_PASSCODE).
+- vercel.json cron "30 2 * * 5" (= Fri 8:00 IST) → /api/cron/weekly, checks Authorization: Bearer CRON_SECRET.
+- Deploy to Vercel (MCP or CLI), connect GitHub repo, copy env vars (never print values), trigger one production run. Give the public URL.
+- Clean, professional, mobile-friendly design.
+
+### Step 8 — Opportunity Score explainer ⭐
+"Why this score" per topic: frequency, growth, unresolved %, severity, + top 3 evidence threads.
+
+### Step 9 — Emerging Topic Radar ⭐
+Gemini clusters posts that don't fit existing topics into suggested topics (keywords + evidence links) → suggested_topics. Dashboard Approve / Reject (ADMIN_PASSCODE); Approve inserts into topics.
+
+### Step 10 — Competitor & Objection Radar + "Ask the Pulse" ⭐
+- Competitor panel: mentions + avg sentiment per tool, with links.
+- Objection panel: common objections to code review automation + suggested responses.
+- "Ask the Pulse": Postgres full-text search over stored posts; Gemini answers ONLY from them with link citations; "not enough data" if nothing relevant.
+
+### Step 11 — Submission pack
+- docs/COMPONENTS_MAP.md AND /architecture page with diagram (every component, service used, data flow).
+- README.md: what it does, live URL, setup, env vars, how cron works.
+- VIVA.md: 25 viva Q&As + 3-minute demo script.
+- Final checks: prove no Anthropic/Claude API, no mock data in production paths, no secrets committed; production site loads with live data.
+
 ## Progress
 ### Step 1 — Project setup ✅ (2026-10-11)
 - Next.js 16.4 (App Router, TypeScript, Tailwind v4, ESLint) scaffolded in the project root.
@@ -100,4 +143,12 @@ NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_K
 - `GET /api/debug/sources`: open in dev; in production needs `Authorization: Bearer <CRON_SECRET>` (verified 401/401/200).
 - Real run (2026-10-11): HN 31, SO 0, GitHub 122, DEV.to 12 → **135 posts** after dedupe. ~10s total.
 
-**Next:** Step 4 (not started).
+### Step 4 — Gemini classifier ✅ (2026-10-11)
+- Model check: listed models with the key. `gemini-2.5-flash` returns 404 "no longer available to new users" → switched GEMINI_MODEL to **`gemini-3.8-flash`** (newest Flash) in `.env.local` and `.env.example`. Remember to use this value on Vercel.
+- `lib/ai/gemini.ts`: `generateJson({system, prompt, schema})` — Zod schema → JSON Schema (`z.toJSONSchema`) sent as `responseJsonSchema`; reply validated with Zod, retried ONCE if invalid; 429/5xx → wait (Google's `retryDelay` or 2s/4s/8s/16s) and retry up to 4 times. `thinkingLevel: LOW`, temperature 0.2.
+- `lib/ai/classify.ts`: `classifyPosts(posts, topics)` — batches of 25, 3 batches in parallel (reuses `mapWithLimit`). Topics sent as short keys T1..Tn, posts as p1..p25, mapped back in code. Topic enum includes `"irrelevant"` → those posts are dropped (with Gemini's reason). Source signals (GitHub open/closed, SO accepted answer) are passed as evidence for is_unresolved. Competitor names normalised to a canonical list (SonarQube, CodeRabbit, GitHub Copilot code review, Graphite, Reviewable, Codacy, DeepSource, Qodo, Greptile, Sourcery, Cursor Bugbot, Semgrep, Snyk Code). Never throws: failed batches go to `errors`.
+- Migration `step4_numeric_sentiment_and_fp_keywords`: `posts.sentiment` is now numeric -1..1; "False positives / noisy review bots" keywords widened (+ 'false positive rate', 'too many false positives', 'AI review comments', 'nitpicks') because it had 0 matches. schema.sql / seed.sql updated.
+- `GET /api/debug/classify?n=10` (max 50): same protection as /api/debug/sources (verified 401 without/with wrong secret in `next start`).
+- Live results (2026-10-11): 150 posts collected. n=10 → 5 kept / 5 dropped in 5s. n=50 → 15 kept / 35 dropped in 15s (2 batches, 0 errors); kept per topic: AI trust 8, flaky tests 4, false positives 2, bottlenecks 1. Most drops are GitHub agent-written planning tickets and product announcements, which is the relevance filter working as intended.
+
+**Next:** Step 5 (not started).
