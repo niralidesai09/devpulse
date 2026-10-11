@@ -1,0 +1,79 @@
+@AGENTS.md
+
+# Project: DevPulse — Weekly Developer Community Intelligence Digest
+
+## User
+Sumit, sole PM at a 15-person startup making a code review automation tool for mid-size engineering teams. Every Friday morning he needs a brief of what developers are discussing about code review, CI/CD automation and developer workflow, before his afternoon engineering sync.
+
+## The brief must answer
+1. Which pain points are surfacing most often this week (with mention counts)
+2. Is each pain point trending up or down vs last week (% change)
+3. Which problems seem unresolved or underserved by existing tools
+
+## Hard rules (exam requirements — never break)
+- All AI tasks use Google Gemini Flash via the official @google/genai SDK. The model name comes from the GEMINI_MODEL env var. NEVER use the Anthropic/Claude API anywhere in the app code.
+- Live external data only — no mock data in production code paths.
+- Topic categories and keywords live in Supabase and are editable without code changes.
+- Deployed on Vercel; scheduled with Vercel Cron every Friday morning IST.
+- Secrets only in env vars; never commit .env files.
+
+## Tools already connected
+- Supabase MCP, scoped to project ref oxibeeaaelnavkjngneg (this is the DevPulse database — use it to create tables and read project URL/keys)
+- Vercel MCP (my Vercel account)
+- GitHub CLI `gh`, logged in as niralidesai09
+
+## Stack
+Next.js (App Router, TypeScript), Tailwind CSS, Supabase (Postgres), @google/genai, Resend (email), Recharts (charts), Zod (validate Gemini JSON output).
+
+## Data sources (public, live)
+- Hacker News via Algolia API (search_by_date endpoint) — no key
+- Stack Overflow via Stack Exchange API v2.3 — optional key
+- GitHub Issues search API — uses GITHUB_TOKEN
+- DEV.to articles API — no key
+Each source is a separate adapter in /lib/sources implementing one shared interface. If one source fails, the run continues and records which sources worked.
+
+## Pipeline (one run)
+1. Load active topics + keywords from Supabase
+2. Fetch posts from the last 7 days from each source per keyword; dedupe by URL
+3. Gemini Flash classifies posts in batches: topic, one-line pain point, is_unresolved (+ reason), sentiment, severity 1-5, competitor tools mentioned
+4. Aggregate counts per topic and compare with the previous run -> trend %
+5. Compute Opportunity Score per topic
+6. Gemini writes the executive brief (markdown) with links to the real threads as evidence
+7. Save everything to Supabase, email the brief via Resend, show it on the dashboard
+
+## Differentiators (beyond the brief)
+A. Opportunity Score = frequency x growth x unresolved ratio x severity, normalised 0-100
+B. Emerging Topic Radar: Gemini finds recurring pain points not covered by existing keywords and saves them to suggested_topics; Sumit approves with one click and it becomes a monitored topic
+C. Competitor & Sales Objection Radar: which competitor tools are mentioned and with what sentiment; map discussions to likely sales objections with a suggested response
+D. "Ask the Pulse": dashboard chat answered by Gemini using only stored posts, always with citations
+E. Evidence-first: every claim in the brief links to real threads
+F. "Run now" button on the dashboard (protected) so the pipeline can be demoed live any day
+
+## Env vars
+NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY, GEMINI_MODEL, GITHUB_TOKEN, STACKEXCHANGE_KEY (optional), RESEND_API_KEY, BRIEF_TO_EMAIL, CRON_SECRET
+
+## Working rules
+- One step at a time. After each step, explain in plain simple English what was built and why, and exactly how to test it.
+- Keep code simple and well commented — the user must explain it in a viva.
+- After each step, update the "Progress" section at the bottom of this file.
+
+## Step 1 (original instructions)
+1. Scaffold a Next.js project in THIS folder (TypeScript, Tailwind, ESLint, App Router). Install @supabase/supabase-js, @google/genai, resend, recharts, zod.
+2. Create folders: /lib/sources, /lib/ai, /lib/db, /lib/pipeline, /app/api.
+3. Create .env.example listing all env vars, and make sure .gitignore excludes .env* files.
+4. Create .env.local. Fill NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY using the Supabase MCP. Generate a random CRON_SECRET. Leave the other values blank and explain where to get each.
+5. Make the home page show "DevPulse — setup OK".
+6. Create a PUBLIC GitHub repo called devpulse using gh, commit, and push.
+7. Give the command to run it locally and what should be seen.
+
+## Progress
+### Step 1 — Project setup ✅ (2026-10-11)
+- Next.js 16.4 (App Router, TypeScript, Tailwind v4, ESLint) scaffolded in the project root.
+- Installed: @supabase/supabase-js, @google/genai, resend, recharts, zod.
+- Empty folders created (with .gitkeep): lib/sources, lib/ai, lib/db, lib/pipeline, app/api.
+- `.env.example` committed; `.gitignore` ignores `.env*` except `.env.example`.
+- `.env.local` created (not committed): Supabase URL + anon key filled, CRON_SECRET generated, GEMINI_MODEL defaulted to gemini-2.5-flash; other keys left for the user.
+- Home page shows "DevPulse — setup OK". `npm run lint` and `npm run build` pass.
+- Public GitHub repo: https://github.com/niralidesai09/devpulse
+
+**Next:** Step 2 (not started).
