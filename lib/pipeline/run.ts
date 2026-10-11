@@ -1,168 +1,148 @@
-// runPipeline(): ONE complete weekly run.
+// One pipeline execution (cron, manual or retry):
 //
-//   1. Create a "runs" row (status = running)
-//   2. Load active topics from Supabase
-//   3. Collect live posts from all 4 sources (last 7 days)
-//   4. In parallel:  a) Gemini classifies the posts
-//                    b) Smart baseline counts HN keyword matches for this week + last week
-//   5. Save the relevant posts
-//   6. Compute topic_stats (mentions, trend, unresolved %, Opportunity Score) and save
-//   7. Mark the run success / partial / failed, with per-source status
+//   collect  → analyse (Gemini, incremental) → consolidate pain points
+//            → deterministic metrics → Gemini brief → store → email
 //
-// Step 6 of the roadmap will add: write the brief + email it.
+// Each stage records its outcome on the run row. A time budget keeps the
+// whole thing inside Vercel's function limit: analysis stops starting new
+// batches when time runs short (the rest stays "pending" for the next run)
+// and the report is skipped — not faked — if there is no time left for it.
 
-import { classifyPosts } from "@/lib/ai/classify";
-import { getModel } from "@/lib/ai/gemini";
-import { createServerClient } from "@/lib/db/supabase";
-import { getActiveTopics } from "@/lib/db/topics";
-import { collectAll } from "@/lib/sources";
-import { countBaseline } from "./baseline";
-import { computeTopicStats, type TopicStat } from "./scoring";
+import { getModel, isGeminiConfigured } from "@/lib/ai/gemini";
+import { FUNCTION_MAX_SECONDS, REPORT_TIMEZONE, REPORT_WEEK_END_DAY } from "@/lib/config";
+import { getActiveConfig } from "@/lib/db/config";
+import { mergeStats, startRun, updateRun } from "@/lib/db/runs";
+import type { CollectionRunRow, RunStats, Trigger } from "@/lib/db/types";
+import { errorMessage, logger } from "@/lib/log";
+import { latestCompletePeriod } from "@/lib/time/periods";
+import { runAnalysis } from "./analyze";
+import { runCollection } from "./collect";
+import { generateReport } from "./report";
 
-// A run that is still "running" after this long was killed (e.g. by the
-// Vercel time limit) and will never finish, so we mark it failed.
-const STALE_RUN_MINUTES = 15;
+// Leave headroom under the 300 s platform limit.
+const BUDGET_MS = (FUNCTION_MAX_SECONDS - 15) * 1000;
+const REPORT_RESERVE_MS = 75_000; // stop analysis early enough for the brief
 
-export type PipelineSummary = {
-  runId: string;
-  status: "success" | "partial" | "failed";
-  stats: Record<string, unknown>;
-  topicStats: TopicStat[];
-  error?: string;
-};
-
-/** Fail old stuck runs, and refuse to start if another run is in progress. */
-async function guardAgainstParallelRuns() {
-  const supabase = createServerClient();
-  const staleBefore = new Date(Date.now() - STALE_RUN_MINUTES * 60_000).toISOString();
-
-  await supabase
-    .from("runs")
-    .update({ status: "failed", finished_at: new Date().toISOString(), error: "Timed out (never finished)" })
-    .eq("status", "running")
-    .lt("started_at", staleBefore);
-
-  const { data } = await supabase.from("runs").select("id").eq("status", "running").limit(1);
-  if (data?.length) throw new Error("Another run is already in progress. Try again in a few minutes.");
+/** The scheduled run for a reporting week can happen only once (see collection_runs.idempotency_key). */
+export function cronIdempotencyKey(now = new Date()): string {
+  const p = latestCompletePeriod(now, REPORT_TIMEZONE, REPORT_WEEK_END_DAY);
+  return `cron:${p.end.toISOString()}`;
 }
 
-export async function runPipeline(trigger: "cron" | "manual"): Promise<PipelineSummary> {
-  const supabase = createServerClient();
-  await guardAgainstParallelRuns();
+export async function createRun(trigger: Trigger, now = new Date()): Promise<CollectionRunRow> {
+  return startRun({
+    trigger,
+    idempotencyKey: trigger === "cron" ? cronIdempotencyKey(now) : null,
+    model: isGeminiConfigured() ? getModel() : null,
+  });
+}
 
-  // 1. Create the run row first, so even a crash is recorded.
-  const { data: run, error: runError } = await supabase
-    .from("runs")
-    .insert({ status: "running", trigger })
-    .select("id")
-    .single();
-  if (runError || !run) throw new Error(`Could not create run: ${runError?.message}`);
+export type RunSummary = {
+  runId: string;
+  status: "succeeded" | "partial" | "failed";
+  reportId: string | null;
+  stats: RunStats;
+  error: string | null;
+};
 
-  const runId: string = run.id;
-  const t0 = Date.now();
+export async function executeRun(run: CollectionRunRow, opts: { startedAt?: number } = {}): Promise<RunSummary> {
+  const t0 = opts.startedAt ?? Date.now();
+  const log = logger({ runId: run.id, trigger: run.trigger });
+  let stats: RunStats = { stage: "starting", timingsMs: {}, warnings: [] };
+  const save = async (next: RunStats, extra: Record<string, unknown> = {}) => {
+    stats = mergeStats(stats, next);
+    await updateRun(run.id, { stats, ...extra });
+  };
+  const elapsed = () => Date.now() - t0;
 
   try {
-    // 2. Topics (editable in Supabase, no code changes).
-    const topics = await getActiveTopics();
-    if (topics.length === 0) throw new Error("No active topics. Add one on the /topics page.");
+    // 1. Configuration (read fresh — edits apply without redeploying)
+    const config = await getActiveConfig();
+    if (!config.topics.length) throw new Error("No active topic with active keywords. Add one in Settings → Topics.");
+    if (!config.sourceIds.length) throw new Error("All sources are disabled. Enable at least one in Settings → Sources.");
+    await updateRun(run.id, { config_snapshot: config.snapshot });
 
-    // 3. Collect live posts.
-    const collected = await collectAll(topics);
-    const tCollect = Date.now() - t0;
+    // 2. Collect
+    await save({ stage: "collecting" });
+    const c = await runCollection(run.id, config, log);
+    await save(
+      {
+        stage: "collected",
+        fetched: c.fetched,
+        uniqueInRun: c.uniqueInRun,
+        duplicatesWithinRun: c.duplicatesWithinRun,
+        inserted: c.inserted,
+        alreadyStored: c.alreadyStored,
+        timingsMs: { collect: elapsed() },
+        warnings: c.outcomes.filter((o) => o.status !== "succeeded").map((o) => `${o.sourceId}: ${o.status} — ${o.error ?? "no detail"}`),
+      },
+      { lookback_start: c.window.start.toISOString(), lookback_end: c.window.end.toISOString() },
+    );
+    if (c.allFailed) throw new Error("Every data source failed; nothing was collected. See per-source errors below.");
 
-    // 4. Classify (Gemini) and count the baseline (Hacker News) at the same time.
-    const [classified, baseline] = await Promise.all([
-      classifyPosts(collected.posts, topics),
-      countBaseline(topics, new Date(collected.windowStart), new Date(collected.windowEnd)),
-    ]);
-
-    // 5. Save the relevant posts (irrelevant ones were dropped by Gemini).
-    if (classified.classified.length) {
-      const rows = classified.classified.map((p) => ({
-        run_id: runId,
-        source: p.source,
-        external_id: p.externalId,
-        url: p.url,
-        title: p.title,
-        snippet: p.snippet,
-        author: p.author,
-        score: p.score,
-        comment_count: p.commentCount,
-        posted_at: p.postedAt,
-        matched_keyword: p.matchedKeyword,
-        topic_id: p.classification.topicId,
-        pain_point: p.classification.painPoint,
-        is_unresolved: p.classification.isUnresolved,
-        unresolved_reason: p.classification.unresolvedReason,
-        sentiment: p.classification.sentiment,
-        severity: p.classification.severity,
-        competitors: p.classification.competitors,
-      }));
-      const { error } = await supabase.from("posts").upsert(rows, { onConflict: "run_id,url", ignoreDuplicates: true });
-      if (error) throw new Error(`Could not save posts: ${error.message}`);
+    // 3. Analyse (incremental, time-boxed)
+    let analysisDegraded = false;
+    if (!isGeminiConfigured()) {
+      analysisDegraded = true;
+      await save({ stage: "analysis_skipped", warnings: ["GEMINI_API_KEY / GEMINI_MODEL not set: discussions stored but not analysed."] });
+    } else {
+      await save({ stage: "analysing" });
+      const tA = Date.now();
+      const a = await runAnalysis({
+        runId: run.id,
+        config,
+        log,
+        shouldStop: () => elapsed() > BUDGET_MS - REPORT_RESERVE_MS,
+      });
+      analysisDegraded = a.failed > 0;
+      await save({
+        stage: "analysed",
+        analyzed: a.analyzed,
+        relevant: a.relevant,
+        irrelevant: a.irrelevant,
+        analysisFailed: a.failed,
+        pendingAfterRun: a.pending,
+        newPainPoints: a.newPainPoints,
+        timingsMs: { analyse: Date.now() - tA },
+        warnings: a.warnings,
+      });
     }
 
-    // 6. Numbers per topic, then save them.
-    const topicStats = computeTopicStats(topics, classified.classified, baseline.topics);
-    const { error: statsError } = await supabase.from("topic_stats").insert(
-      topicStats.map((s) => ({
-        run_id: runId,
-        topic_id: s.topicId,
-        mention_count: s.mentionCount,
-        unresolved_count: s.unresolvedCount,
-        avg_severity: s.avgSeverity,
-        avg_sentiment: s.avgSentiment,
-        baseline_this_week: s.baselineThisWeek,
-        baseline_last_week: s.baselineLastWeek,
-        change_pct: s.changePct,
-        trend: s.trend,
-        trend_detail: s.trendDetail,
-        score_frequency: s.scoreFrequency,
-        score_growth: s.scoreGrowth,
-        score_unresolved: s.scoreUnresolved,
-        score_severity: s.scoreSeverity,
-        score_raw: s.scoreRaw,
-        opportunity_score: s.opportunityScore,
-      })),
-    );
-    if (statsError) throw new Error(`Could not save topic stats: ${statsError.message}`);
+    // 4. Report (only if there is time; otherwise say so honestly)
+    let reportId: string | null = null;
+    let reportFailed = false;
+    if (!isGeminiConfigured()) {
+      reportFailed = true;
+      await save({ stage: "report_skipped", reportStatus: "skipped", reportError: "Gemini not configured" });
+    } else if (elapsed() > BUDGET_MS - 45_000) {
+      reportFailed = true;
+      await save({
+        stage: "report_skipped",
+        reportStatus: "skipped",
+        reportError: "Not enough time left in this invocation. Use “Generate report” to create it from the stored data.",
+      });
+    } else {
+      await save({ stage: "reporting" });
+      const tR = Date.now();
+      const r = await generateReport({ runId: run.id, trigger: run.trigger, log });
+      reportId = r.reportId;
+      reportFailed = r.status === "failed";
+      await save({ stage: "reported", reportId, reportStatus: r.status, reportError: r.error, timingsMs: { report: Date.now() - tR } });
+    }
 
-    // 7. Finish: "partial" if any source, Gemini batch or baseline count failed.
-    const sourceFailed = Object.values(collected.sources).some((s) => !s.ok);
-    const status = sourceFailed || classified.errors.length || baseline.errors.length ? "partial" : "success";
-    const stats = {
-      model: getModel(),
-      postsCollected: collected.posts.length,
-      postsKept: classified.classified.length,
-      postsDropped: classified.dropped.length,
-      geminiBatches: classified.batches,
-      classifyErrors: classified.errors,
-      baselineErrors: baseline.errors,
-      baselineMs: baseline.durationMs,
-      collectMs: tCollect,
-      totalMs: Date.now() - t0,
-    };
-
-    await supabase
-      .from("runs")
-      .update({
-        status,
-        finished_at: new Date().toISOString(),
-        window_start: collected.windowStart,
-        window_end: collected.windowEnd,
-        sources_status: collected.sources,
-        stats,
-      })
-      .eq("id", runId);
-
-    return { runId, status, stats, topicStats };
+    const status = c.anyDegraded || analysisDegraded || reportFailed ? "partial" : "succeeded";
+    await save({ stage: "done", timingsMs: { total: elapsed() } }, { status, finished_at: new Date().toISOString() });
+    log.info("run.done", { status, ms: elapsed() });
+    return { runId: run.id, status, reportId, stats, error: null };
   } catch (err) {
-    // Anything unexpected: record it on the run so /runs can show what went wrong.
-    const message = err instanceof Error ? err.message : String(err);
-    await supabase
-      .from("runs")
-      .update({ status: "failed", finished_at: new Date().toISOString(), error: message, stats: { totalMs: Date.now() - t0 } })
-      .eq("id", runId);
-    return { runId, status: "failed", stats: {}, topicStats: [], error: message };
+    const message = errorMessage(err);
+    log.error("run.failed", { error: message, stage: stats.stage });
+    await updateRun(run.id, {
+      status: "failed",
+      error: message.slice(0, 1000),
+      finished_at: new Date().toISOString(),
+      stats: mergeStats(stats, { timingsMs: { total: elapsed() } }),
+    }).catch(() => {});
+    return { runId: run.id, status: "failed", reportId: null, stats, error: message };
   }
 }

@@ -1,27 +1,23 @@
-// Hacker News adapter (Algolia search API, no key needed).
-// One request per keyword; returns both stories AND comments from the last 7 days.
+// Hacker News adapter — Algolia HN Search API (public, no key).
 // Docs: https://hn.algolia.com/api
+//
+// One request per keyword over the whole lookback window, stories AND
+// comments. Algolia matches loosely (word-level), so every hit is checked
+// locally for the exact keyword phrase before it is kept.
 
-import {
-  cleanText,
-  fetchJson,
-  mapWithLimit,
-  matchTopic,
-  runSafely,
-  snippetAround,
-  toUnixSeconds,
-  type SourceAdapter,
-  type SourcePost,
-} from "./utils";
+import { cleanText, excerptAround, matchKeywords } from "@/lib/text";
+import type { CollectedDiscussion, SourceAdapter } from "./types";
+import { emptyResult, fetchJson, mapWithLimit, toUnixSeconds } from "./utils";
 
-// Only the fields we use from Algolia's response.
+const HITS_PER_PAGE = 300;
+
 type HnHit = {
   objectID: string;
-  title: string | null; // stories only
-  story_title: string | null; // comments: title of the parent story
-  story_text: string | null; // "Ask HN" style story body
-  comment_text: string | null; // comments only
-  author: string;
+  title: string | null; // stories
+  story_title: string | null; // comments: parent story title
+  story_text: string | null; // Ask HN body
+  comment_text: string | null; // comments
+  author: string | null;
   points: number | null;
   num_comments: number | null;
   created_at: string;
@@ -29,55 +25,66 @@ type HnHit = {
 };
 
 export const hackerNewsAdapter: SourceAdapter = {
-  name: "hackernews",
+  id: "hackernews",
 
-  fetchPosts(topics, since) {
-    return runSafely("hackernews", async () => {
-      // Build one job per (topic, keyword) pair.
-      const jobs = topics.flatMap((topic) => topic.keywords.map((keyword) => ({ topic, keyword })));
+  async fetch({ keywords, since, until }) {
+    const result = emptyResult();
+    const byId = new Map<string, CollectedDiscussion>();
 
-      const { results, errors } = await mapWithLimit(jobs, 4, async ({ topic, keyword }) => {
-        const params = new URLSearchParams({
-          query: keyword,
-          tags: "(story,comment)", // stories OR comments
-          numericFilters: `created_at_i>${toUnixSeconds(since)}`,
-          hitsPerPage: "100",
-        });
-        const data = await fetchJson<{ hits: HnHit[] }>(
-          `https://hn.algolia.com/api/v1/search_by_date?${params}`,
-        );
-
-        const posts: SourcePost[] = [];
-        for (const hit of data.hits) {
-          const isComment = hit._tags.includes("comment");
-          const title = isComment ? `Comment on: ${hit.story_title ?? "HN thread"}` : (hit.title ?? "");
-          const body = cleanText(isComment ? hit.comment_text : hit.story_text, Infinity);
-
-          // Keep it only if a keyword really appears (Algolia matches loosely).
-          const match = matchTopic(`${title} ${body}`, topics, topic.id);
-          if (!match) continue;
-          const snippet = snippetAround(body, match.keyword);
-
-          posts.push({
-            source: "hackernews",
-            externalId: hit.objectID,
-            // Link to the HN discussion itself, not the external article.
-            url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
-            title,
-            snippet,
-            author: hit.author ?? null,
-            score: hit.points ?? 0,
-            commentCount: hit.num_comments ?? 0,
-            postedAt: hit.created_at,
-            matchedKeyword: match.keyword,
-            topicId: match.topicId,
-            signals: {},
-          });
-        }
-        return posts;
+    const { errors } = await mapWithLimit(keywords, 4, async ({ keyword }) => {
+      result.requests++;
+      const params = new URLSearchParams({
+        query: keyword,
+        tags: "(story,comment)",
+        numericFilters: `created_at_i>=${toUnixSeconds(since)},created_at_i<${toUnixSeconds(until)}`,
+        hitsPerPage: String(HITS_PER_PAGE),
       });
+      const data = await fetchJson<{ hits: HnHit[]; nbHits: number }>(
+        `https://hn.algolia.com/api/v1/search_by_date?${params}`,
+      );
+      if (data.nbHits > data.hits.length) result.truncated = true;
 
-      return { posts: results.flat(), errors, requests: jobs.length };
+      for (const hit of data.hits) {
+        if (!hit.objectID || !hit.created_at) {
+          result.skippedMalformed++;
+          continue;
+        }
+        const isComment = hit._tags.includes("comment");
+        const title = cleanText(isComment ? `Comment on: ${hit.story_title ?? "HN thread"}` : hit.title, 300);
+        const body = cleanText(isComment ? hit.comment_text : hit.story_text, Infinity);
+        if (!title && !body) {
+          result.skippedMalformed++;
+          continue;
+        }
+        // The parent story title is context, not the commenter's words, so
+        // comments must contain the keyword in their own text.
+        const matchText = isComment ? body : `${title} ${body}`;
+        const matches = matchKeywords(matchText, keywords);
+        if (!matches.length) continue;
+
+        const existing = byId.get(hit.objectID);
+        if (existing) continue; // already captured via another keyword (matches computed over ALL keywords)
+
+        byId.set(hit.objectID, {
+          sourceId: "hackernews",
+          externalId: hit.objectID,
+          url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+          title,
+          excerpt: excerptAround(body, matches[0].keyword),
+          author: hit.author ?? null,
+          score: hit.points ?? 0,
+          commentCount: hit.num_comments ?? 0,
+          publishedAt: new Date(hit.created_at).toISOString(),
+          matchedKeywords: matches.map((m) => m.keyword),
+          topicIds: [...new Set(matches.map((m) => m.topicId))],
+          signals: { kind: isComment ? "comment" : "story", parentTitle: hit.story_title ?? undefined },
+        });
+      }
     });
+
+    result.failedRequests = errors.length;
+    result.errors = errors;
+    result.discussions = [...byId.values()];
+    return result;
   },
 };

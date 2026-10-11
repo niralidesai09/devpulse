@@ -1,119 +1,164 @@
-// Gemini Flash wrapper: the ONLY place in the app that talks to an AI model.
+// Gemini Flash wrapper — the ONLY place in the app that talks to an AI model.
+// Uses Google's official @google/genai SDK; the model id comes from
+// GEMINI_MODEL and must be a Flash model (checked below).
 //
-// Uses Google's official @google/genai SDK. The model name comes from the
-// GEMINI_MODEL env var (e.g. "gemini-3.8-flash"), so it can be changed
-// without touching code.
-//
-// generateJson() asks Gemini for JSON that follows a schema and makes it safe:
-//   1. Structured output: we send a JSON Schema (built from our Zod schema),
-//      so Gemini is forced to reply in that exact shape.
-//   2. Validation: we still check the reply with Zod. If it is broken or
-//      doesn't match, we ask ONE more time, then give up with an error.
-//   3. Rate limits: if Google answers 429 (too many requests) or 5xx
-//      (overloaded), we wait and try again: 2s, 4s, 8s, 16s.
+// generateJson() makes model output safe to use:
+//   1. Structured output: a JSON Schema (generated from our Zod schema) is
+//      sent as responseJsonSchema, so Gemini must answer in that shape.
+//   2. Validation: the reply is parsed and validated with the same Zod
+//      schema. Invalid → ONE repair attempt that shows the model its error.
+//      Still invalid → throw (callers keep raw data and retry later).
+//   3. Transient errors (429 / 5xx / timeouts): bounded exponential backoff,
+//      honouring Google's retryDelay hint, max 4 retries.
+//   4. Every call has a timeout and an input-size cap.
 
 import { ApiError, GoogleGenAI, ThinkingLevel } from "@google/genai";
 import { z } from "zod";
 
-const MAX_RATE_LIMIT_RETRIES = 4;
+const MAX_TRANSIENT_RETRIES = 4;
+const CALL_TIMEOUT_MS = 120_000;
+const MAX_PROMPT_CHARS = 200_000; // ~50k tokens — well inside Flash's context, bounds cost
 
 let client: GoogleGenAI | null = null;
 
-// Create the client once and reuse it.
 function getClient(): GoogleGenAI {
   if (!process.env.GEMINI_API_KEY) throw new Error("Missing environment variable GEMINI_API_KEY");
   client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   return client;
 }
 
-/** The Gemini model name from the environment (must be a Flash model). */
+/** The configured Gemini model. Refuses anything that is not a Flash model (exam requirement). */
 export function getModel(): string {
-  const model = process.env.GEMINI_MODEL;
+  const model = process.env.GEMINI_MODEL?.trim();
   if (!model) throw new Error("Missing environment variable GEMINI_MODEL");
+  if (!/^gemini-[\w.-]*flash[\w.-]*$/i.test(model)) {
+    throw new Error(`GEMINI_MODEL must be a Gemini Flash model (got "${model}")`);
+  }
   return model;
+}
+
+export function isGeminiConfigured(): boolean {
+  return Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_MODEL);
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/**
- * Should we wait and retry this error? Yes for 429 (rate limit) and
- * 500/503 (Google overloaded). No for anything else (e.g. bad API key).
- */
-function isRetryable(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 429 || err.status >= 500);
+/** 429 (quota / rate limit), 5xx (overloaded) and timeouts are worth retrying; 400/401/403/404 are not. */
+export function isTransient(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status === 429 || err.status >= 500;
+  if (err instanceof Error) return /timeout|aborted|ECONNRESET|fetch failed|network/i.test(err.message);
+  return false;
 }
 
-/**
- * Google often says how long to wait, e.g. "retryDelay": "17s".
- * Use that if present, otherwise exponential backoff (2s, 4s, 8s, ...).
- */
-function backoffMs(err: unknown, attempt: number): number {
+/** Google often returns "retryDelay": "17s"; otherwise 2s, 4s, 8s, 16s. Capped at 45s. */
+export function backoffMs(err: unknown, attempt: number): number {
   const match = err instanceof Error ? err.message.match(/"retryDelay":\s*"(\d+(?:\.\d+)?)s"/) : null;
-  if (match) return Math.min(Number(match[1]) * 1000, 60_000);
-  return 2000 * 2 ** attempt;
+  if (match) return Math.min(Number(match[1]) * 1000 + 250, 45_000);
+  return Math.min(2000 * 2 ** attempt, 45_000);
 }
 
-/** One call to Gemini, with wait-and-retry on rate limits. Returns raw text. */
-async function callGemini(options: {
+/** A quota-exhausted 429 (daily limit) will not recover by waiting a few seconds. */
+export function isQuotaExhausted(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 429 && /per.?day|PerDay|quota exceeded/i.test(err.message);
+}
+
+async function callGemini(opts: {
   system: string;
   prompt: string;
   jsonSchema: unknown;
   thinkingLevel: ThinkingLevel;
+  temperature: number;
 }): Promise<string> {
   for (let attempt = 0; ; attempt++) {
     try {
       const response = await getClient().models.generateContent({
         model: getModel(),
-        contents: options.prompt,
+        contents: opts.prompt,
         config: {
-          systemInstruction: options.system,
+          systemInstruction: opts.system,
           responseMimeType: "application/json",
-          responseJsonSchema: options.jsonSchema,
-          // LOW thinking = faster + cheaper. Classification doesn't need deep reasoning.
-          thinkingConfig: { thinkingLevel: options.thinkingLevel },
-          temperature: 0.2, // low = consistent answers for the same post
+          responseJsonSchema: opts.jsonSchema,
+          thinkingConfig: { thinkingLevel: opts.thinkingLevel },
+          temperature: opts.temperature,
+          abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
         },
       });
       return response.text ?? "";
     } catch (err) {
-      if (!isRetryable(err) || attempt >= MAX_RATE_LIMIT_RETRIES) throw err;
+      if (!isTransient(err) || isQuotaExhausted(err) || attempt >= MAX_TRANSIENT_RETRIES) throw err;
       await sleep(backoffMs(err, attempt));
     }
   }
 }
 
+/** Zod schema → JSON Schema accepted by Gemini (drops the "$schema" header). */
+export function toGeminiSchema(schema: z.ZodType): unknown {
+  const { $schema, ...jsonSchema } = z.toJSONSchema(schema, { target: "draft-2020-12" }) as Record<string, unknown>;
+  void $schema;
+  return jsonSchema;
+}
+
+export class GeminiOutputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GeminiOutputError";
+  }
+}
+
 /**
- * Ask Gemini for JSON matching `schema`. Returns the validated, typed result.
- * Throws if the reply is still invalid after one retry.
+ * Ask Gemini for JSON matching `schema`; returns the validated, typed result.
+ * Throws GeminiOutputError if the reply is still invalid after one repair attempt.
  */
-export async function generateJson<T>(options: {
+export async function generateJson<T>(opts: {
   system: string;
   prompt: string;
   schema: z.ZodType<T>;
   thinkingLevel?: ThinkingLevel;
+  temperature?: number;
 }): Promise<T> {
-  // Turn the Zod schema into a JSON Schema for Gemini. Zod stays the single
-  // source of truth: the same schema shapes the request AND checks the reply.
-  const { $schema, ...jsonSchema } = z.toJSONSchema(options.schema, { target: "draft-2020-12" });
-  void $schema; // Gemini doesn't need the "$schema" header field
-
+  if (opts.prompt.length > MAX_PROMPT_CHARS) {
+    throw new Error(`Prompt too large (${opts.prompt.length} chars, limit ${MAX_PROMPT_CHARS})`);
+  }
+  const jsonSchema = toGeminiSchema(opts.schema);
+  let prompt = opts.prompt;
   let lastError = "";
+
   for (let attempt = 1; attempt <= 2; attempt++) {
     const text = await callGemini({
-      system: options.system,
-      prompt: options.prompt,
+      system: opts.system,
+      prompt,
       jsonSchema,
-      thinkingLevel: options.thinkingLevel ?? ThinkingLevel.LOW,
+      thinkingLevel: opts.thinkingLevel ?? ThinkingLevel.LOW,
+      temperature: opts.temperature ?? 0.2,
     });
-
-    try {
-      return options.schema.parse(JSON.parse(text));
-    } catch (err) {
-      // Broken JSON or wrong shape -> try exactly once more.
-      lastError = err instanceof Error ? err.message.slice(0, 300) : String(err);
-    }
+    const parsed = parseAndValidate(text, opts.schema);
+    if (parsed.ok) return parsed.value;
+    lastError = parsed.error;
+    // Repair attempt: same task, plus the validation error.
+    prompt =
+      `${opts.prompt}\n\nIMPORTANT: your previous reply was rejected by the validator with this error:\n` +
+      `${lastError}\nReturn ONLY JSON that matches the schema exactly.`;
   }
-  throw new Error(`Gemini returned invalid JSON twice: ${lastError}`);
+  throw new GeminiOutputError(`Gemini returned invalid JSON twice: ${lastError}`);
+}
+
+/** Parse JSON text and validate it — exported for unit tests. */
+export function parseAndValidate<T>(text: string, schema: z.ZodType<T>): { ok: true; value: T } | { ok: false; error: string } {
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (err) {
+    return { ok: false, error: `Not valid JSON: ${(err as Error).message.slice(0, 200)}` };
+  }
+  const result = schema.safeParse(json);
+  if (result.success) return { ok: true, value: result.data };
+  return {
+    ok: false,
+    error: result.error.issues
+      .slice(0, 5)
+      .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; "),
+  };
 }
 
 export { ThinkingLevel };

@@ -1,26 +1,159 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* =====================================================================
+   DevPulse design tokens
+   Neutral, low-chroma surfaces; one accent (indigo) for interaction;
+   data colours from the validated categorical palette (see docs/DESIGN.md);
+   status colours reserved for state and always paired with a label.
+   ===================================================================== */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  color-scheme: light;
+  --bg: #f9f9f7;
+  --surface: #ffffff;
+  --surface-2: #f4f4f1;
+  --surface-3: #ecebe6;
+  --border: #e4e3dd;
+  --border-strong: #cfcec6;
+  --text: #111110;
+  --text-2: #52514e;
+  --text-3: #75736d;
+  --accent: #4c5bd4;
+  --accent-hover: #3f4dc0;
+  --accent-soft: #eef0fd;
+  --accent-text: #3441b0;
+  --focus: #4c5bd4;
+
+  /* status (reserved) */
+  --good: #0a7d0a;
+  --good-soft: #e8f5e8;
+  --warn: #8a5a00;
+  --warn-soft: #fdf3dc;
+  --bad: #b42323;
+  --bad-soft: #fbeaea;
+  --info: #2a62b8;
+  --info-soft: #e8f0fb;
+
+  /* data (validated categorical palette, light) */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-ref: #b9b8b1; /* previous week / reference */
+  --grid: #e9e8e2;
+  --axis: #c3c2b7;
+
+  --shadow-sm: 0 1px 2px rgba(17, 17, 16, 0.04);
+  --shadow-md: 0 4px 16px rgba(17, 17, 16, 0.08);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0d0d0d;
+    --surface: #161615;
+    --surface-2: #1d1d1b;
+    --surface-3: #262624;
+    --border: #2b2b29;
+    --border-strong: #3b3b38;
+    --text: #f3f3f1;
+    --text-2: #c3c2b7;
+    --text-3: #93918a;
+    --accent: #7b87ee;
+    --accent-hover: #8e98f1;
+    --accent-soft: #1f2340;
+    --accent-text: #aab2f6;
+    --focus: #8e98f1;
+    --good: #3cc23c;
+    --good-soft: #10260f;
+    --warn: #f0b43c;
+    --warn-soft: #2a2008;
+    --bad: #f07070;
+    --bad-soft: #2d1212;
+    --info: #6aa5f0;
+    --info-soft: #0f1e33;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-ref: #55544f;
+    --grid: #262624;
+    --axis: #383835;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  background: var(--bg);
+}
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Print: the report view prints cleanly without app chrome. */
+@media print {
+  :root {
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #ffffff;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-full {
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  a {
+    color: inherit;
+    text-decoration: underline;
+  }
+  section,
+  article,
+  .avoid-break {
+    break-inside: avoid;
+  }
 }

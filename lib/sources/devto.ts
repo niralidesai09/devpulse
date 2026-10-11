@@ -1,32 +1,14 @@
-// DEV.to adapter (Forem API, no key needed).
-//
-// DEV.to has no keyword search, so we fetch the newest articles from
-// relevant tags, keep only those from the last 7 days, and match them
-// to topics by keyword in the title or description ourselves.
+// DEV Community adapter — Forem API v1 (public, no key).
 // Docs: https://developers.forem.com/api/v1
+//
+// DEV has no keyword search, so we read the newest articles from relevant
+// tags (paging back until we pass the window start) and match keywords in
+// the title + description ourselves.
 
-import {
-  cleanText,
-  fetchJson,
-  mapWithLimit,
-  matchTopic,
-  runSafely,
-  type SourceAdapter,
-  type SourcePost,
-} from "./utils";
+import { cleanText, matchKeywords } from "@/lib/text";
+import type { CollectedDiscussion, SourceAdapter } from "./types";
+import { emptyResult, fetchJson, mapWithLimit } from "./utils";
 
-type DevArticle = {
-  id: number;
-  url: string;
-  title: string;
-  description: string | null;
-  user?: { username?: string };
-  positive_reactions_count: number;
-  comments_count: number;
-  published_at: string;
-};
-
-// Tags where code review / CI/CD / workflow discussions happen.
 const TAGS = [
   "codereview",
   "cicd",
@@ -39,47 +21,72 @@ const TAGS = [
   "softwareengineering",
   "ai",
 ];
+const MAX_PAGES_PER_TAG = 3;
+
+type DevArticle = {
+  id: number;
+  url: string;
+  title: string;
+  description: string | null;
+  user?: { username?: string };
+  positive_reactions_count: number;
+  comments_count: number;
+  published_at: string;
+  tag_list?: string[];
+};
 
 export const devToAdapter: SourceAdapter = {
-  name: "devto",
+  id: "devto",
 
-  fetchPosts(topics, since) {
-    return runSafely("devto", async () => {
-      const { results, errors } = await mapWithLimit(TAGS, 3, async (tag) => {
-        // /articles/latest = newest first, up to 1000 per page. Busy tags
-        // (e.g. "ai") get 1000+ posts a day, so 100 covered only a few hours.
+  async fetch({ keywords, since, until }) {
+    const result = emptyResult();
+    const byId = new Map<string, CollectedDiscussion>();
+
+    const { errors } = await mapWithLimit(TAGS, 3, async (tag) => {
+      for (let page = 1; page <= MAX_PAGES_PER_TAG; page++) {
+        result.requests++;
         const articles = await fetchJson<DevArticle[]>(
-          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=1000`,
+          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=100&page=${page}`,
         );
-
-        const posts: SourcePost[] = [];
+        let reachedOlder = articles.length < 100;
         for (const a of articles) {
-          if (new Date(a.published_at) < since) continue; // older than 7 days
-
+          const published = new Date(a.published_at);
+          if (!a.id || !a.url || Number.isNaN(published.getTime())) {
+            result.skippedMalformed++;
+            continue;
+          }
+          if (published < since) {
+            reachedOlder = true;
+            continue;
+          }
+          if (published >= until) continue;
           const title = cleanText(a.title, 300);
-          const snippet = cleanText(a.description);
-          const match = matchTopic(`${title} ${snippet}`, topics);
-          if (!match) continue;
-
-          posts.push({
-            source: "devto",
+          const description = cleanText(a.description, 600);
+          const matches = matchKeywords(`${title} ${description}`, keywords);
+          if (!matches.length || byId.has(String(a.id))) continue;
+          byId.set(String(a.id), {
+            sourceId: "devto",
             externalId: String(a.id),
             url: a.url,
             title,
-            snippet,
+            excerpt: description,
             author: a.user?.username ?? null,
             score: a.positive_reactions_count,
             commentCount: a.comments_count,
-            postedAt: a.published_at,
-            matchedKeyword: match.keyword,
-            topicId: match.topicId,
-            signals: {},
+            publishedAt: published.toISOString(),
+            matchedKeywords: matches.map((m) => m.keyword),
+            topicIds: [...new Set(matches.map((m) => m.topicId))],
+            signals: { kind: "article" },
           });
         }
-        return posts;
-      });
-
-      return { posts: results.flat(), errors, requests: TAGS.length };
+        if (reachedOlder) return;
+        if (page === MAX_PAGES_PER_TAG) result.truncated = true;
+      }
     });
+
+    result.failedRequests = errors.length;
+    result.errors = errors;
+    result.discussions = [...byId.values()];
+    return result;
   },
 };
