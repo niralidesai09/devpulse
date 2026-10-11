@@ -9,6 +9,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 
 export const SESSION_COOKIE = "dp_admin";
 const SESSION_DAYS = 7;
@@ -70,6 +71,7 @@ export function newSessionCookie() {
 }
 
 export async function isAdmin(): Promise<boolean> {
+  await connection(); // request-time only: depends on the cookie and the current time
   const store = await cookies();
   return verifySession(store.get(SESSION_COOKIE)?.value);
 }

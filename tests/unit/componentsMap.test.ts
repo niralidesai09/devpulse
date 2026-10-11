@@ -25,3 +25,11 @@ describe("components map", () => {
     expect(pkg).not.toMatch(/@anthropic-ai|anthropic/i);
   });
 });
+
+describe("docs/COMPONENTS_MAP.md", () => {
+  it("contains exactly the diagram the app renders", async () => {
+    const { COMPONENTS_MAP } = await import("@/lib/componentsMap");
+    const doc = readFileSync(join(root, "docs/COMPONENTS_MAP.md"), "utf8");
+    expect(doc).toContain(COMPONENTS_MAP.trimEnd());
+  });
+});
