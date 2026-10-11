@@ -164,4 +164,6 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - Live run (2026-10-11, 43s): HN 42, SO 0, GitHub 122, DEV.to 28 → 157 collected, 58 kept, 99 dropped, 7 Gemini batches, 0 errors, status **success**. Ranking: Flaky tests 100 (new, 15 mentions), CI/CD 59, Code review bottlenecks 42, Trust in AI code review 26 (▼45%, most mentions 18), False positives 18 (▼55%), PR size 10.
 - Known limits: HN baseline counts are small (0–20/week) so trends are noisy; some kept GitHub posts are borderline (agent-written tickets) — evidence links are ranked by engagement.
 
+- **Two sessions, two copies (2026-10-11):** another session ("Developer Community Pulse product build") is building a "v2" redesign in `~/devpulse` on `main`. Its unfinished files were accidentally swept into commit d88f084 by `git add -A`. The roadmap continues in the git worktree **`~/devpulse-roadmap` on branch `roadmap`**, which removes those files and restores Step 4's `lib/sources/types.ts`, `utils.ts`, `package.json`. Verified there: tsc, lint, build pass; live run success (153 collected, 61 kept, 41s). Both copies share ONE Supabase database — schema changes from either side affect the other. Always `git add` specific paths, never `-A`.
+
 **Next:** Step 6 (not started).
