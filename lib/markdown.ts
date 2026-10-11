@@ -26,5 +26,11 @@ const marked = new Marked({
 });
 
 export function markdownToHtml(markdown: string): string {
-  return marked.parse(markdown, { async: false });
+  return (
+    marked
+      .parse(markdown, { async: false })
+      // Wide tables scroll sideways on phones instead of breaking the page.
+      .replace(/<table>/g, '<div class="table-scroll"><table>')
+      .replace(/<\/table>/g, "</table></div>")
+  );
 }
