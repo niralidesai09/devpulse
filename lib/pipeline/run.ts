@@ -7,16 +7,20 @@
 //                    b) Smart baseline counts HN keyword matches for this week + last week
 //   5. Save the relevant posts
 //   6. Compute topic_stats (mentions, trend, unresolved %, Opportunity Score) and save
-//   7. Mark the run success / partial / failed, with per-source status
+//   7. Gemini writes the Friday brief -> save it -> email it with Resend
+//   8. Mark the run success / partial / failed, with per-source status
 //
-// Step 6 of the roadmap will add: write the brief + email it.
+// A failed brief or email does NOT lose the data: the run becomes "partial"
+// and the brief can be re-written / re-sent later.
 
 import { classifyPosts } from "@/lib/ai/classify";
 import { getModel } from "@/lib/ai/gemini";
 import { createServerClient } from "@/lib/db/supabase";
 import { getActiveTopics } from "@/lib/db/topics";
+import { sendBriefEmail } from "@/lib/email/brief-email";
 import { collectAll } from "@/lib/sources";
 import { countBaseline } from "./baseline";
+import { createBrief } from "./brief";
 import { computeTopicStats, type TopicStat } from "./scoring";
 
 // A run that is still "running" after this long was killed (e.g. by the
@@ -127,10 +131,8 @@ export async function runPipeline(trigger: "cron" | "manual"): Promise<PipelineS
     );
     if (statsError) throw new Error(`Could not save topic stats: ${statsError.message}`);
 
-    // 7. Finish: "partial" if any source, Gemini batch or baseline count failed.
-    const sourceFailed = Object.values(collected.sources).some((s) => !s.ok);
-    const status = sourceFailed || classified.errors.length || baseline.errors.length ? "partial" : "success";
-    const stats = {
+    // Save the run's window, sources and numbers now: the brief reads them.
+    const stats: Record<string, unknown> = {
       model: getModel(),
       postsCollected: collected.posts.length,
       postsKept: classified.classified.length,
@@ -140,20 +142,39 @@ export async function runPipeline(trigger: "cron" | "manual"): Promise<PipelineS
       baselineErrors: baseline.errors,
       baselineMs: baseline.durationMs,
       collectMs: tCollect,
-      totalMs: Date.now() - t0,
     };
-
     await supabase
       .from("runs")
       .update({
-        status,
-        finished_at: new Date().toISOString(),
         window_start: collected.windowStart,
         window_end: collected.windowEnd,
         sources_status: collected.sources,
         stats,
       })
       .eq("id", runId);
+
+    // 7. The Friday brief: write (Gemini) -> save -> email (Resend).
+    const tBrief = Date.now();
+    try {
+      const brief = await createBrief(runId);
+      stats.briefId = brief.id;
+      stats.briefChecks = brief.checks;
+      const email = await sendBriefEmail(brief.id);
+      stats.emailSent = email.ok;
+      if (!email.ok) stats.emailError = email.error;
+    } catch (err) {
+      stats.briefError = err instanceof Error ? err.message : String(err);
+    }
+    stats.briefMs = Date.now() - tBrief;
+    stats.totalMs = Date.now() - t0;
+
+    // 8. Finish: "partial" if any source, Gemini batch, baseline, brief or email failed.
+    const sourceFailed = Object.values(collected.sources).some((s) => !s.ok);
+    const somethingFailed =
+      sourceFailed || classified.errors.length || baseline.errors.length || stats.briefError || stats.emailError;
+    const status = somethingFailed ? "partial" : "success";
+
+    await supabase.from("runs").update({ status, finished_at: new Date().toISOString(), stats }).eq("id", runId);
 
     return { runId, status, stats, topicStats };
   } catch (err) {

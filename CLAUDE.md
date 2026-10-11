@@ -166,4 +166,16 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 
 - **Two sessions, two copies (2026-10-11):** another session ("Developer Community Pulse product build") is building a "v2" redesign in `~/devpulse` on `main`. Its unfinished files were accidentally swept into commit d88f084 by `git add -A`. The roadmap continues in the git worktree **`~/devpulse-roadmap` on branch `roadmap`**, which removes those files and restores Step 4's `lib/sources/types.ts`, `utils.ts`, `package.json`. Verified there: tsc, lint, build pass; live run success (153 collected, 61 kept, 41s). Both copies share ONE Supabase database — schema changes from either side affect the other. Always `git add` specific paths, never `-A`.
 
-**Next:** Step 6 (not started).
+### Step 6 — Friday brief + email ✅ (2026-10-11)
+- `lib/pipeline/brief.ts`: `loadBriefData(runId)` (from DB: run, topic_stats, posts, pending suggested_topics) → `writeBrief` → `createBrief` (upsert into briefs, one per run). Gemini returns structured JSON (Zod: tldr×3, rising_falling, unresolved, emerging, competitor_commentary, objections 2–4, sprint×3); CODE assembles the markdown with all 8 sections.
+  - **No invented numbers:** the pain-point table and competitor table are rendered by code from topic_stats/posts; Gemini's text is checked — every number must appear in its input (`checks.unverifiedNumbers`).
+  - **No invented links:** evidence posts get ids E1..E120; Gemini cites `[E3]`, code replaces with real `[Source](url)` links; links/URLs typed by Gemini are stripped; unknown ids counted (`checks.unknownRefs`).
+  - Objection responses are honest talking points (Gemini doesn't know the product's features). Thinking LOW: 13–15s (MEDIUM took 69s with similar quality).
+- `lib/markdown.ts`: `markdownToHtml` (marked 18, GFM tables; raw HTML escaped, only http(s) links, open in new tab) — reused by the dashboard in Step 7.
+- `lib/email/brief-email.ts`: `briefEmailHtml` (email-safe template) + `sendBriefEmail(briefId)` via Resend from `onboarding@resend.dev` to BRIEF_TO_EMAIL, HTML + plain-text; stores `emailed_at` or `email_error`. Never throws.
+- Pipeline now: save run window/sources/stats → createBrief → sendBriefEmail → status (brief or email failure ⇒ "partial", data kept).
+- Migration `step6_brief_metadata` (0004): briefs.model, email_error, checks.
+- `GET /api/debug/brief` (dev open / prod secret, 401 verified): latest brief as the email HTML; `?format=md` JSON; `?regenerate=1` re-write; `?email=1` re-send.
+- Live end-to-end run (2026-10-11, 71s): 149 collected, 62 kept, brief written in 15s with 26 evidence links, 0 unknown refs, 0 unverified numbers; **email sent** (emailed_at stored).
+
+**Next:** Step 7 (not started).
