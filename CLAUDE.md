@@ -76,4 +76,14 @@ NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_K
 - Home page shows "DevPulse — setup OK". `npm run lint` and `npm run build` pass.
 - Public GitHub repo: https://github.com/niralidesai09/devpulse
 
-**Next:** Step 2 (not started).
+### Step 2 — Database ✅ (2026-10-11)
+- All required env vars confirmed filled in `.env.local` (STACKEXCHANGE_KEY optional, empty).
+- Supabase migrations applied: `create_devpulse_schema`, `seed_starter_topics`. Same SQL saved in `supabase/schema.sql` and `supabase/seed.sql`.
+- Tables: topics, runs, posts (unique run_id+url), topic_stats (PK run_id+topic_id), briefs (one per run), suggested_topics (status pending/approved/rejected). FKs cascade from runs; topic deletes set posts.topic_id null.
+- RLS on every table: anon/authenticated SELECT only; INSERT/UPDATE/DELETE revoked. Server writes use the service role key. Verified: anon insert/update → "permission denied".
+- 6 starter topics seeded (6–7 keywords each).
+- Security advisor: 0 issues. Performance advisor: only INFO "unused index" (expected on empty tables; kept).
+- `lib/db/supabase.ts`: `createServerClient()` (service role, server only) and `createBrowserClient()` (anon, read-only), plus `Topic` type.
+- `/topics` page lists topics + keywords (rendered per request via `await connection()`; `loading.tsx` shown while loading). Note: `next.config.ts` has `cacheComponents: true`.
+
+**Next:** Step 3 (not started).
