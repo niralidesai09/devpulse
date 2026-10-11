@@ -1,45 +1,81 @@
-// Helpers shared by all adapters: HTTP with timeout + retry,
-// limited concurrency, HTML cleaning and keyword matching.
+// HTTP + concurrency helpers shared by all adapters.
 
-import type { SourceAdapter, SourceName, SourceResult, SourcePost, TopicInput } from "./types";
+import type { SourceAdapter, SourceFetchResult, SourceOutcome, FetchContext } from "./types";
 
-const TIMEOUT_MS = 10_000; // 10 seconds per request
-const USER_AGENT = "DevPulse/1.0";
+const TIMEOUT_MS = 12_000;
+const USER_AGENT = "DevPulse/2.0 (developer community research; https://github.com/niralidesai09/devpulse)";
+const MAX_RETRIES = 2; // so at most 3 attempts per request
+const MAX_WAIT_MS = 15_000; // never wait longer than this for a Retry-After
 
-/**
- * GET a URL and parse JSON. Gives up after 10s, and retries ONCE on any
- * failure (network error, timeout or non-2xx status) after a short pause.
- */
-export async function fetchJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
+export class HttpError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public retryAfterMs: number | null = null,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Retry only what can succeed later: network errors, timeouts, 429 and 5xx. */
+export function isRetryable(err: unknown): boolean {
+  if (err instanceof HttpError) return err.status === 429 || err.status >= 500;
+  return true; // network error / timeout
+}
+
+/** Wait time before retry `attempt` (1-based): server's Retry-After if given, else 1s, 3s. */
+export function retryDelayMs(err: unknown, attempt: number): number {
+  if (err instanceof HttpError && err.retryAfterMs !== null) return Math.min(err.retryAfterMs, MAX_WAIT_MS);
+  return 1000 * (2 * attempt - 1);
+}
+
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null;
+  const secs = Number(value);
+  if (Number.isFinite(secs)) return secs * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+}
+
+/** GET a URL and parse JSON, with timeout and bounded retry. */
+export async function fetchJson<T>(
+  url: string,
+  headers: Record<string, string> = {},
+  fetchImpl: typeof fetch = fetch,
+): Promise<T> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (attempt > 0) await sleep(retryDelayMs(lastError, attempt));
     try {
-      const res = await fetch(url, {
+      const res = await fetchImpl(url, {
         headers: { "User-Agent": USER_AGENT, Accept: "application/json", ...headers },
         signal: AbortSignal.timeout(TIMEOUT_MS),
-        cache: "no-store", // always live data
+        cache: "no-store",
       });
       if (!res.ok) {
-        const body = await res.text();
-        throw new Error(`HTTP ${res.status}: ${body.slice(0, 200)}`);
+        const body = (await res.text()).slice(0, 200).replace(/\s+/g, " ");
+        throw new HttpError(res.status, `HTTP ${res.status}: ${body}`, parseRetryAfter(res.headers.get("retry-after")));
       }
       return (await res.json()) as T;
     } catch (err) {
       lastError = err;
-      if (attempt === 1) await new Promise((r) => setTimeout(r, 1000));
+      if (!isRetryable(err)) break;
     }
   }
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 /**
- * Run `worker` over every item, but at most `limit` at the same time,
- * so we never flood an API. Failures are collected, not thrown.
+ * Run `worker` over every item with at most `limit` in flight, so we never
+ * flood an API. Failures are collected, not thrown.
  */
 export async function mapWithLimit<T, R>(
   items: T[],
   limit: number,
-  worker: (item: T) => Promise<R>,
+  worker: (item: T, index: number) => Promise<R>,
 ): Promise<{ results: R[]; errors: string[] }> {
   const results: R[] = [];
   const errors: string[] = [];
@@ -47,9 +83,9 @@ export async function mapWithLimit<T, R>(
 
   async function lane() {
     while (next < items.length) {
-      const item = items[next++];
+      const index = next++;
       try {
-        results.push(await worker(item));
+        results.push(await worker(items[index], index));
       } catch (err) {
         errors.push(err instanceof Error ? err.message : String(err));
       }
@@ -60,87 +96,39 @@ export async function mapWithLimit<T, R>(
   return { results, errors };
 }
 
-// Turn HTML (or markdown with HTML) into plain text and limit its length.
-export function cleanText(input: string | null | undefined, maxLength = 500): string {
-  if (!input) return "";
-  const text = input
-    .replace(/<[^>]*>/g, " ") // remove tags
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCodePoint(Number(dec)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ") // collapse whitespace/newlines
-    .trim();
-  return text.length > maxLength ? text.slice(0, maxLength - 1) + "…" : text;
-}
-
-/**
- * Pick a 500-character snippet from the full body that CONTAINS the keyword.
- * If the keyword is in the title (or near the start), we just take the start.
- * This way the evidence Gemini reads is the part that talks about the problem.
- */
-export function snippetAround(fullText: string, keyword: string, maxLength = 500): string {
-  if (fullText.length <= maxLength) return fullText;
-  const pos = fullText.toLowerCase().indexOf(keyword.toLowerCase());
-  if (pos < maxLength - keyword.length) return fullText.slice(0, maxLength - 1) + "…";
-  // Start ~150 characters before the keyword so there is some context.
-  const start = Math.max(0, pos - 150);
-  return "…" + fullText.slice(start, start + maxLength - 2) + "…";
-}
-
-/**
- * Find the first topic whose keyword appears in the text (case-insensitive).
- * `preferredTopicId` is checked first: the topic we were searching for.
- */
-export function matchTopic(
-  text: string,
-  topics: TopicInput[],
-  preferredTopicId?: string,
-): { topicId: string; keyword: string } | null {
-  const haystack = text.toLowerCase();
-  const ordered = preferredTopicId
-    ? [...topics].sort((a, b) => Number(b.id === preferredTopicId) - Number(a.id === preferredTopicId))
-    : topics;
-  for (const topic of ordered) {
-    for (const keyword of topic.keywords) {
-      if (haystack.includes(keyword.toLowerCase())) return { topicId: topic.id, keyword };
-    }
-  }
-  return null;
-}
-
-// Unix timestamp in seconds (what HN and Stack Overflow expect).
 export function toUnixSeconds(date: Date): number {
   return Math.floor(date.getTime() / 1000);
 }
 
-/**
- * Wraps an adapter's work: measures time and turns any crash into
- * ok:false, so one broken source never stops the whole run.
- * `work` returns the posts plus any per-request errors it collected.
- */
-export async function runSafely(
-  name: SourceName,
-  work: () => Promise<{ posts: SourcePost[]; errors: string[]; requests: number }>,
-): Promise<SourceResult> {
-  const start = Date.now();
-  try {
-    const { posts, errors, requests } = await work();
-    // If EVERY request failed, the source is down -> ok:false.
-    const allFailed = requests > 0 && errors.length >= requests;
-    const error = errors.length
-      ? `${errors.length}/${requests} requests failed. First error: ${errors[0]}`
-      : null;
-    return { posts, ok: !allFailed, error, durationMs: Date.now() - start };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { posts: [], ok: false, error: `${name}: ${message}`, durationMs: Date.now() - start };
-  }
+/** An empty result to build on. */
+export function emptyResult(): SourceFetchResult {
+  return { discussions: [], requests: 0, failedRequests: 0, truncated: false, skippedMalformed: 0, errors: [] };
 }
 
-// Re-export the types so adapters can import everything from one place.
-export type { SourceAdapter, SourcePost, TopicInput };
+/**
+ * Run an adapter and turn any crash into status "failed", so one broken
+ * source never stops the whole collection.
+ *   succeeded = every request worked
+ *   partial   = some requests failed (data from the others is kept)
+ *   failed    = nothing worked
+ */
+export async function runAdapter(adapter: SourceAdapter, ctx: FetchContext): Promise<SourceOutcome> {
+  const start = Date.now();
+  try {
+    const r = await adapter.fetch(ctx);
+    const status =
+      r.requests > 0 && r.failedRequests >= r.requests ? "failed" : r.failedRequests > 0 ? "partial" : "succeeded";
+    const error = r.errors.length
+      ? `${r.failedRequests}/${r.requests} requests failed. First error: ${r.errors[0]}`
+      : null;
+    return { ...r, sourceId: adapter.id, status, error, durationMs: Date.now() - start };
+  } catch (err) {
+    return {
+      ...emptyResult(),
+      sourceId: adapter.id,
+      status: "failed",
+      error: err instanceof Error ? err.message : String(err),
+      durationMs: Date.now() - start,
+    };
+  }
+}

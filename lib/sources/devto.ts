@@ -46,9 +46,10 @@ export const devToAdapter: SourceAdapter = {
   fetchPosts(topics, since) {
     return runSafely("devto", async () => {
       const { results, errors } = await mapWithLimit(TAGS, 3, async (tag) => {
-        // /articles/latest = newest first. 100 per page is the max.
+        // /articles/latest = newest first, up to 1000 per page. Busy tags
+        // (e.g. "ai") get 1000+ posts a day, so 100 covered only a few hours.
         const articles = await fetchJson<DevArticle[]>(
-          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=100`,
+          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=1000`,
         );
 
         const posts: SourcePost[] = [];

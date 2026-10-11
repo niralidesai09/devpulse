@@ -121,7 +121,7 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 
 ### Step 2 — Database ✅ (2026-10-11)
 - All required env vars confirmed filled in `.env.local` (STACKEXCHANGE_KEY optional, empty).
-- Supabase migrations applied: `create_devpulse_schema`, `seed_starter_topics`. Same SQL saved in `supabase/schema.sql` and `supabase/seed.sql`.
+- Supabase migrations applied: `create_devpulse_schema`, `seed_starter_topics`. Same SQL saved in `supabase/migrations/0001_initial_schema.sql` and `0002_seed_starter_topics.sql` (originally schema.sql / seed.sql).
 - Tables: topics, runs, posts (unique run_id+url), topic_stats (PK run_id+topic_id), briefs (one per run), suggested_topics (status pending/approved/rejected). FKs cascade from runs; topic deletes set posts.topic_id null.
 - RLS on every table: anon/authenticated SELECT only; INSERT/UPDATE/DELETE revoked. Server writes use the service role key. Verified: anon insert/update → "permission denied".
 - 6 starter topics seeded (6–7 keywords each).
@@ -147,8 +147,21 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - Model check: listed models with the key. `gemini-2.5-flash` returns 404 "no longer available to new users" → switched GEMINI_MODEL to **`gemini-3.8-flash`** (newest Flash) in `.env.local` and `.env.example`. Remember to use this value on Vercel.
 - `lib/ai/gemini.ts`: `generateJson({system, prompt, schema})` — Zod schema → JSON Schema (`z.toJSONSchema`) sent as `responseJsonSchema`; reply validated with Zod, retried ONCE if invalid; 429/5xx → wait (Google's `retryDelay` or 2s/4s/8s/16s) and retry up to 4 times. `thinkingLevel: LOW`, temperature 0.2.
 - `lib/ai/classify.ts`: `classifyPosts(posts, topics)` — batches of 25, 3 batches in parallel (reuses `mapWithLimit`). Topics sent as short keys T1..Tn, posts as p1..p25, mapped back in code. Topic enum includes `"irrelevant"` → those posts are dropped (with Gemini's reason). Source signals (GitHub open/closed, SO accepted answer) are passed as evidence for is_unresolved. Competitor names normalised to a canonical list (SonarQube, CodeRabbit, GitHub Copilot code review, Graphite, Reviewable, Codacy, DeepSource, Qodo, Greptile, Sourcery, Cursor Bugbot, Semgrep, Snyk Code). Never throws: failed batches go to `errors`.
-- Migration `step4_numeric_sentiment_and_fp_keywords`: `posts.sentiment` is now numeric -1..1; "False positives / noisy review bots" keywords widened (+ 'false positive rate', 'too many false positives', 'AI review comments', 'nitpicks') because it had 0 matches. schema.sql / seed.sql updated.
+- Migration `step4_numeric_sentiment_and_fp_keywords`: `posts.sentiment` is now numeric -1..1; "False positives / noisy review bots" keywords widened (+ 'false positive rate', 'too many false positives', 'AI review comments', 'nitpicks') because it had 0 matches. migration files 0001 / 0002 updated.
 - `GET /api/debug/classify?n=10` (max 50): same protection as /api/debug/sources (verified 401 without/with wrong secret in `next start`).
 - Live results (2026-10-11): 150 posts collected. n=10 → 5 kept / 5 dropped in 5s. n=50 → 15 kept / 35 dropped in 15s (2 batches, 0 errors); kept per topic: AI trust 8, flaky tests 4, false positives 2, bottlenecks 1. Most drops are GitHub agent-written planning tickets and product announcements, which is the relevance filter working as intended.
 
-**Next:** Step 5 (not started).
+### Step 5 — Pipeline + trend engine ✅ (2026-10-11)
+- **Fixed env:** `SUPABASE_SERVICE_ROLE_KEY` held a *publishable* key (read-only; Steps 2–3 only read so it went unnoticed) → user replaced it with the `sb_secret_…` key. Use the secret key on Vercel too.
+- SQL files now live in `supabase/migrations/` (0001 schema, 0002 seed, 0003 Step 5). New migration `step5_pipeline_trend_score_columns`: runs.trigger + runs.stats; posts.matched_keyword; topic_stats: prev_mention_count → baseline_last_week, + baseline_this_week, trend, trend_detail, avg_sentiment, score_frequency/growth/unresolved/severity/raw.
+- `lib/pipeline/run.ts` `runPipeline(trigger)`: fails runs stuck in "running" > 15 min, refuses to start if one is running → creates run → topics → `collectAll` → **in parallel** `classifyPosts` + `countBaseline` → upsert kept posts → insert topic_stats (one row per active topic, even 0 mentions) → status success / partial (any source, Gemini batch or baseline error) / failed (error saved on the run).
+- `lib/pipeline/baseline.ts` SMART BASELINE = **Hacker News only**: exact-phrase Algolia search (`advancedSyntax`), distinct post ids per topic, this week (run window) vs the 7 days before. If either week fails → topic trend "no_data" (never an unfair comparison).
+  - Why not GitHub: tested title-only + bot-excluded counts, but GitHub's *secondary* rate limit (search compute budget) returns 403 on every extra search right after the collector's ~11 full-text searches, even paced 2.5s apart and 40s later. Dropped from baseline; GitHub still used for collection.
+  - Why not DEV.to: no date search; tag "ai" gets 1000+ posts/day.
+- `lib/pipeline/scoring.ts` (pure functions): trend up/down/flat (±5%)/new (last week 0)/no_data; `formatTrend` → "▲ 25%", "▼ 10%", "→ 0%", "new", "–". Opportunity Score: frequency = mentions/max mentions; growth = (this+3)/(last+3) clamped 0.5–2 (the +3 smoothing stops 2-vs-0 from dominating); unresolved = unresolved/mentions; severity = avg/5; raw = product; score = raw/max raw × 100.
+- DEV.to collector: `per_page` 100 → 1000 (100 covered only a few hours of busy tags) → 13 → 28 matched DEV.to posts.
+- Routes: `GET /api/cron/weekly` (maxDuration 300, ALWAYS needs Bearer CRON_SECRET, 409 if a run is in progress); `GET /api/debug/latest-run` (dev open / prod secret): latest run, sources, topics ranked by score with trend, keyword matches, "why this score" components and top-3 evidence by engagement. Verified 401 (no header / wrong secret) on all protected routes in `next start`.
+- Live run (2026-10-11, 43s): HN 42, SO 0, GitHub 122, DEV.to 28 → 157 collected, 58 kept, 99 dropped, 7 Gemini batches, 0 errors, status **success**. Ranking: Flaky tests 100 (new, 15 mentions), CI/CD 59, Code review bottlenecks 42, Trust in AI code review 26 (▼45%, most mentions 18), False positives 18 (▼55%), PR size 10.
+- Known limits: HN baseline counts are small (0–20/week) so trends are noisy; some kept GitHub posts are borderline (agent-written tickets) — evidence links are ranked by engagement.
+
+**Next:** Step 6 (not started).
