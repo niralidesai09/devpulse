@@ -20,8 +20,10 @@ insert into public.topics (name, description, keywords) values
 (
   'False positives / noisy review bots',
   'Automated reviewers, linters and static analysis that flag too much or the wrong things.',
-  array['false positives', 'noisy bot comments', 'code review bot', 'static analysis false positive',
-        'sonarqube false positive', 'linter noise', 'review bot spam']
+  -- (Step 3: plain "false positives" was removed: it matched unrelated posts
+  --  about security scanners, cameras, etc. More specific phrases instead.)
+  array['linter false positive', 'noisy bot comments', 'code review bot', 'static analysis false positive',
+        'sonarqube false positive', 'linter noise', 'review bot spam', 'bot review comments']
 ),
 (
   'CI/CD pipeline failures',

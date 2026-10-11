@@ -86,4 +86,18 @@ NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_K
 - `lib/db/supabase.ts`: `createServerClient()` (service role, server only) and `createBrowserClient()` (anon, read-only), plus `Topic` type.
 - `/topics` page lists topics + keywords (rendered per request via `await connection()`; `loading.tsx` shown while loading). Note: `next.config.ts` has `cacheComponents: true`.
 
-**Next:** Step 3 (not started).
+### Step 3 — Live data collectors ✅ (2026-10-11)
+- `lib/sources/types.ts`: `SourcePost`, `SourceResult`, `SourceAdapter` (`fetchPosts(topics, since)`).
+- `lib/sources/utils.ts`: `fetchJson` (10s timeout, 1 retry, UA "DevPulse/1.0"), `mapWithLimit` (concurrency), `cleanText` (strip HTML), `snippetAround` (500-char snippet centred on the keyword), `matchTopic` (case-insensitive phrase match), `runSafely` (errors → ok:false, never throws).
+- Adapters: `hackernews.ts` (Algolia, stories+comments, 1 req/keyword, concurrency 4), `stackoverflow.ts`, `github.ts`, `devto.ts` (10 tags via /articles/latest, concurrency 3).
+- Deviations from the brief (on purpose):
+  - Stack Overflow: SO gets only ~290 new questions/week site-wide, so instead of ~47 keyword searches we page ALL last-7-day questions via `/search/advanced` (~3 requests, saves the 300/day quota) and match locally. Result: **0 matches this week** — verified that none of the 287 questions contain any keyword even in the full body; sister sites (softwareengineering, devops, sqa) have ~0 traffic. Adapter works (ok:true); it is a data-volume issue.
+  - GitHub: max 5 ORs per query (API returns "More than five AND / OR / NOT operators"), so keywords are chunked 6 per query → 1–2 queries per topic. Issues by `[bot]` accounts are skipped.
+  - Keyword matching uses title + FULL body; the stored snippet is the 500 chars around the keyword (so the keyword is always in title or snippet).
+- Keyword tuning: plain "false positives" matched mostly unrelated posts → replaced (migration `tune_false_positive_keywords`, seed.sql updated). "small pull requests" / "CodeRabbit" still bring some agent-written GitHub planning issues — Gemini relevance filtering in Step 4 should handle this (classifier needs an "irrelevant/not a pain point" outcome).
+- `lib/sources/index.ts`: `collectAll(topics)` — adapters in parallel (Promise.allSettled), dedupe by normalised URL, cap 300 by score+comments, per-source status.
+- `lib/db/topics.ts`: `getActiveTopics()`. `lib/auth.ts`: `hasCronSecret(request)` (constant-time compare).
+- `GET /api/debug/sources`: open in dev; in production needs `Authorization: Bearer <CRON_SECRET>` (verified 401/401/200).
+- Real run (2026-10-11): HN 31, SO 0, GitHub 122, DEV.to 12 → **135 posts** after dedupe. ~10s total.
+
+**Next:** Step 4 (not started).
