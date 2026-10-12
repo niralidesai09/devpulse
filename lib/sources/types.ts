@@ -22,7 +22,8 @@ export interface SourcePost {
   author: string | null;
   score: number; // points / votes / reactions
   commentCount: number; // comments or answers
-  postedAt: string; // ISO date string
+  postedAt: string; // ISO date string: ORIGINAL publication time from the source
+  retrievedAt: string; // ISO date string: when Groundswell fetched it
   matchedKeyword: string; // which topic keyword appears in title/snippet
   topicId: string; // the topic that keyword belongs to
   // Hints that help decide later if a problem is "unresolved".
@@ -33,12 +34,22 @@ export interface SourcePost {
   };
 }
 
-// What every adapter returns. ok:false means the source failed,
-// but the run continues with the other sources.
+// What every adapter returns.
+//   status "ok"      = every request succeeded
+//   status "partial" = some requests failed, but some data came back
+//   status "failed"  = nothing usable came back
+// A partial or failed source makes the whole run "partial"; the run continues.
+// notes = coverage limits that are NOT errors (e.g. a search hit its page cap).
+export type SourceStatusValue = "ok" | "partial" | "failed";
+
 export interface SourceResult {
   posts: SourcePost[];
-  ok: boolean;
+  ok: boolean; // true only when status === "ok"
+  status: SourceStatusValue;
   error: string | null;
+  notes: string[];
+  requests: number;
+  failedRequests: number;
   durationMs: number;
 }
 

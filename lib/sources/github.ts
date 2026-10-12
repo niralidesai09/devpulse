@@ -40,7 +40,9 @@ export const githubAdapter: SourceAdapter = {
       const token = process.env.GITHUB_TOKEN;
       if (!token) throw new Error("GITHUB_TOKEN is not set");
 
-      const sinceDay = since.toISOString().slice(0, 10); // YYYY-MM-DD
+      // Exact start of the 7-day window (GitHub accepts full timestamps).
+      const sinceIso = `${since.toISOString().slice(0, 19)}Z`;
+      const notes: string[] = [];
 
       // Build the OR queries: one per topic (two if it has > 6 keywords).
       const jobs = topics.flatMap((topic) => {
@@ -51,22 +53,28 @@ export const githubAdapter: SourceAdapter = {
         return chunks.map((keywords) => ({
           topic,
           // Quotes = exact phrase. Remove any quotes inside a keyword.
-          query: `(${keywords.map((k) => `"${k.replace(/"/g, "")}"`).join(" OR ")}) is:issue created:>=${sinceDay}`,
+          query: `(${keywords.map((k) => `"${k.replace(/"/g, "")}"`).join(" OR ")}) is:issue created:>=${sinceIso}`,
         }));
       });
 
       const { results, errors } = await mapWithLimit(jobs, 2, async ({ topic, query }) => {
         const params = new URLSearchParams({ q: query, sort: "created", order: "desc", per_page: "100" });
-        const data = await fetchJson<{ items: GhIssue[] }>(`https://api.github.com/search/issues?${params}`, {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-        });
+        const data = await fetchJson<{ items: GhIssue[]; total_count: number; incomplete_results: boolean }>(
+          `https://api.github.com/search/issues?${params}`,
+          { Authorization: `Bearer ${token}`, Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+        );
+        const retrievedAt = new Date().toISOString();
+        // Only the newest 100 per query are read; say so when there were more.
+        if (data.total_count > data.items.length) {
+          notes.push(`${topic.name}: ${data.total_count} matching issues, kept the newest ${data.items.length}`);
+        }
+        if (data.incomplete_results) notes.push(`${topic.name}: GitHub reported incomplete search results`);
 
         const posts: SourcePost[] = [];
         for (const issue of data.items) {
           // Skip issues opened by bots (e.g. "dependabot[bot]"): we want human pain points.
           if (issue.user?.login.endsWith("[bot]")) continue;
+          if (new Date(issue.created_at) < since) continue; // outside the 7-day window
 
           const title = cleanText(issue.title, 300);
           const body = cleanText(issue.body, Infinity);
@@ -84,6 +92,7 @@ export const githubAdapter: SourceAdapter = {
             score: issue.reactions?.total_count ?? 0,
             commentCount: issue.comments,
             postedAt: issue.created_at,
+            retrievedAt,
             matchedKeyword: match.keyword,
             topicId: match.topicId,
             signals: { isOpen: issue.state === "open" },
@@ -92,7 +101,7 @@ export const githubAdapter: SourceAdapter = {
         return posts;
       });
 
-      return { posts: results.flat(), errors, requests: jobs.length };
+      return { posts: results.flat(), errors, requests: jobs.length, notes };
     });
   },
 };

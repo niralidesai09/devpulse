@@ -48,6 +48,7 @@ export const stackOverflowAdapter: SourceAdapter = {
     return runSafely("stackoverflow", async () => {
       const posts: SourcePost[] = [];
       const errors: string[] = [];
+      const notes: string[] = [];
       let requests = 0;
 
       // Pages are fetched one after another (concurrency 1) to respect limits.
@@ -73,6 +74,7 @@ export const stackOverflowAdapter: SourceAdapter = {
           break; // can't continue paging without this page
         }
 
+        const retrievedAt = new Date().toISOString();
         for (const q of data.items) {
           const title = cleanText(q.title, 300);
           const body = cleanText(q.body, Infinity);
@@ -90,6 +92,7 @@ export const stackOverflowAdapter: SourceAdapter = {
             score: q.score,
             commentCount: q.answer_count,
             postedAt: new Date(q.creation_date * 1000).toISOString(),
+            retrievedAt,
             matchedKeyword: match.keyword,
             topicId: match.topicId,
             signals: {
@@ -100,11 +103,12 @@ export const stackOverflowAdapter: SourceAdapter = {
         }
 
         if (!data.has_more) break;
+        if (page === MAX_PAGES) notes.push(`more than ${MAX_PAGES * 100} questions this week; checked the newest ${MAX_PAGES * 100}`);
         // Obey the API's "backoff" request, or we get temporarily banned.
         if (data.backoff) await new Promise((r) => setTimeout(r, data.backoff! * 1000));
       }
 
-      return { posts, errors, requests };
+      return { posts, errors, requests, notes };
     });
   },
 };

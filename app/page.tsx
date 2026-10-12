@@ -13,7 +13,7 @@ import { RunNow } from "@/components/run-now";
 import { ScoreExplainer, type ScoreContext } from "@/components/score-explainer";
 import { TrendChart } from "@/components/trend-chart";
 import { isAdmin } from "@/lib/admin";
-import { getDashboard, getSuggestions, type TopicCard } from "@/lib/db/dashboard";
+import { getDashboard, getSuggestions, sourceOutcome, type TopicCard } from "@/lib/db/dashboard";
 import { fmtDate, fmtDateTime, fmtDuration, SOURCE_LABEL } from "@/lib/format";
 import { markdownToHtml } from "@/lib/markdown";
 
@@ -38,7 +38,13 @@ export default async function HomePage() {
   const { run, topics, brief, totals, competitors, objections } = dashboard;
   const top = topics[0];
   const riser = fastestRiser(topics);
-  const okSources = Object.entries(run.sources).filter(([, s]) => s.ok).length;
+  const outcomes = Object.values(run.sources).map(sourceOutcome);
+  const completeSources = outcomes.filter((o) => o === "ok").length;
+  const sourceNote =
+    completeSources === outcomes.length
+      ? `all ${outcomes.length} sources complete`
+      : `${completeSources} of ${outcomes.length} sources complete (see Runs)`;
+  const hasPreviousRun = topics.some((t) => !t.vsPreviousRun.startsWith("no previous weekly run"));
   const unresolvedPct = totals.kept ? Math.round((totals.unresolved / totals.kept) * 100) : 0;
 
   // Shared numbers the "Why this score?" panels compare against.
@@ -61,6 +67,7 @@ export default async function HomePage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-balance sm:text-[28px]">
             What developers are struggling with this week
           </h1>
+          <p className="mt-1 text-sm text-ink-2">From Hacker News, GitHub Issues, Stack Overflow and DEV.to</p>
           <p className="mt-1 text-sm text-ink-3">
             Last run {fmtDateTime(run.finishedAt)} · {run.trigger === "cron" ? "scheduled" : "manual"} ·{" "}
             <span className={run.status === "success" ? "text-good" : "text-warn"}>{run.status}</span> ·{" "}
@@ -72,12 +79,17 @@ export default async function HomePage() {
 
       {/* 2. KPI cards */}
       <section className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Key numbers">
-        <Kpi label="Relevant posts" value={String(totals.kept)} note={`of ${totals.collected} collected · ${okSources} sources OK`} />
-        <Kpi label="Top opportunity" value={top?.name ?? "–"} note={top ? `score ${top.opportunityScore} · ${top.mentions} mentions` : ""} small />
+        <Kpi label="Relevant posts" value={String(totals.kept)} note={`of ${totals.collected} collected · ${sourceNote}`} />
         <Kpi
-          label="Fastest riser"
-          value={riser?.name ?? "Nothing rising"}
-          note={riser ? `${riser.trendLabel} vs last week` : "no topic grew this week"}
+          label="Top opportunity"
+          value={top?.name ?? "–"}
+          note={top ? `relative score ${top.opportunityScore} · ${top.mentions} ${top.mentions === 1 ? "mention" : "mentions"}` : ""}
+          small
+        />
+        <Kpi
+          label="Fastest rising (Hacker News)"
+          value={riser?.name ?? "None with enough data"}
+          note={riser ? `keyword matches ${riser.trendLabel}` : `needs at least 5 keyword matches across both weeks`}
           small
         />
         <Kpi label="Unresolved" value={`${unresolvedPct}%`} note={`${totals.unresolved} of ${totals.kept} posts have no working fix`} />
@@ -88,7 +100,8 @@ export default async function HomePage() {
         <div>
           <h2 className="text-sm font-semibold">Topics ranked by opportunity</h2>
           <p className="mt-0.5 text-xs text-ink-3">
-            Score 0–100 = frequency × growth × unresolved share × severity. 100 = biggest opportunity this week.
+            Opportunity Score = frequency × growth × unresolved share × severity. It is relative: this week&apos;s top topic = 100.
+            {!hasPreviousRun && " Mention trends across all sources start after the next weekly run; until then, trends use Hacker News keyword matches."}
           </p>
           <ol className="mt-3 space-y-3">
             {topics.map((t, i) => (
@@ -98,7 +111,7 @@ export default async function HomePage() {
         </div>
         <aside className="self-start rounded-xl border border-line bg-surface p-4 lg:sticky lg:top-4">
           <h2 className="text-sm font-semibold">Week over week</h2>
-          <p className="mt-0.5 mb-3 text-xs text-ink-3">Keyword matches, this week vs the 7 days before</p>
+          <p className="mt-0.5 mb-3 text-xs text-ink-3">Hacker News keyword matches only: this week vs the 7 days before</p>
           <TrendChart
             data={topics.map((t) => ({
               topic: t.name,
@@ -129,7 +142,7 @@ export default async function HomePage() {
           {brief && (
             <p className="text-xs text-ink-3">
               {brief.emailedAt ? `Emailed ${fmtDateTime(brief.emailedAt)}` : brief.emailError ? `Email failed: ${brief.emailError}` : "Not emailed"}
-              {brief.model ? ` · written by ${brief.model}` : ""}
+              {" · AI-assisted"}
             </p>
           )}
         </div>
@@ -143,7 +156,11 @@ export default async function HomePage() {
   );
 }
 
-/** Biggest % increase; otherwise the "new" topic with the most matches. */
+/**
+ * Biggest HN keyword increase among topics with enough data ("up" already
+ * requires ≥ 5 matches across both weeks); otherwise the "new in HN data"
+ * topic with the most matches. Never picks a "too few to compare" topic.
+ */
 function fastestRiser(topics: TopicCard[]): TopicCard | null {
   const up = topics.filter((t) => t.trend === "up").sort((a, b) => (b.changePct ?? 0) - (a.changePct ?? 0));
   if (up.length) return up[0];
@@ -169,7 +186,7 @@ function TopicRow({ topic: t, rank, ctx }: { topic: TopicCard; rank: number; ctx
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <h3 className="font-medium">{t.name}</h3>
-            <span className="tabular shrink-0 font-mono text-lg leading-none font-medium" aria-label={`Opportunity score ${t.opportunityScore} of 100`}>
+            <span className="tabular shrink-0 font-mono text-lg leading-none font-medium" aria-label={`Opportunity Score ${t.opportunityScore} of 100`}>
               {t.opportunityScore}
               <span className="text-xs text-ink-3">/100</span>
             </span>
@@ -179,8 +196,9 @@ function TopicRow({ topic: t, rank, ctx }: { topic: TopicCard; rank: number; ctx
             <div className="h-1 rounded-full bg-accent" style={{ width: `${t.opportunityScore}%` }} />
           </div>
           <dl className="tabular mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-2">
-            <Stat label="Mentions" value={String(t.mentions)} />
-            <Stat label="Trend" value={t.trendLabel} />
+            <Stat label="Mentions (all sources)" value={String(t.mentions)} />
+            <Stat label="Hacker News keyword matches" value={t.trendLabel} />
+            {!t.vsPreviousRun.startsWith("no previous weekly run") && <Stat label="vs previous run" value={t.vsPreviousRun} />}
             <Stat label="Unresolved" value={`${t.unresolvedPct}%`} />
             <Stat label="Severity" value={t.avgSeverity === null ? "–" : `${t.avgSeverity.toFixed(1)}/5`} />
           </dl>

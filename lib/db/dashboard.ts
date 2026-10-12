@@ -1,10 +1,24 @@
 // Read-only queries for the dashboard pages ("/" and "/runs").
 // Server only (uses the service-role client).
 
-import { formatTrend, type Trend } from "@/lib/pipeline/scoring";
+import { formatRunComparison, formatTrend, type GrowthBasis, type Trend, type TrendDetail } from "@/lib/pipeline/scoring";
 import { createServerClient } from "./supabase";
 
-export type SourceStatus = { ok: boolean; count: number; error: string | null; durationMs: number };
+export type SourceStatus = {
+  ok: boolean;
+  status?: "ok" | "partial" | "failed"; // older runs only stored ok
+  count: number;
+  error: string | null;
+  notes?: string[];
+  durationMs: number;
+};
+
+/** A source's real outcome, also for runs saved before "partial" existed. */
+export function sourceOutcome(s: SourceStatus): "ok" | "partial" | "failed" {
+  if (s.status) return s.status;
+  if (!s.ok) return "failed";
+  return s.error ? "partial" : "ok";
+}
 
 export type RunRow = {
   id: string;
@@ -40,7 +54,9 @@ export type TopicCard = {
   avgSentiment: number | null;
   trend: Trend;
   changePct: number | null;
-  trendLabel: string; // "▲ 25%", "new", ...
+  trendLabel: string; // HN keyword trend with counts, e.g. "11 → 19 (▲ 73%)"
+  vsPreviousRun: string; // all-source mentions vs the previous weekly run (or why not)
+  growthBasis: GrowthBasis;
   keywordsThisWeek: number | null;
   keywordsLastWeek: number | null;
   components: { frequency: number; growth: number; unresolved: number; severity: number; raw: number };
@@ -131,7 +147,9 @@ export async function getDashboard(): Promise<Dashboard | null> {
       avgSentiment: num(s.avg_sentiment),
       trend,
       changePct,
-      trendLabel: formatTrend(trend, changePct),
+      trendLabel: formatTrend(trend, changePct, s.baseline_this_week, s.baseline_last_week),
+      vsPreviousRun: formatRunComparison(s.mention_count, s.trend_detail as TrendDetail),
+      growthBasis: ((s.trend_detail as TrendDetail | null)?.growthBasis ?? (s.baseline_this_week === null ? "none" : "hn_keywords")) as GrowthBasis,
       keywordsThisWeek: s.baseline_this_week,
       keywordsLastWeek: s.baseline_last_week,
       components: {

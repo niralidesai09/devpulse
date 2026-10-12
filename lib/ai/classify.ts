@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { Topic } from "@/lib/db/supabase";
 import type { SourcePost } from "@/lib/sources/types";
 import { mapWithLimit } from "@/lib/sources/utils";
-import { generateJson } from "./gemini";
+import { generateJson, UNTRUSTED_CONTENT_RULE, untrusted } from "./gemini";
 
 const BATCH_SIZE = 25;
 const PARALLEL_BATCHES = 3;
@@ -113,7 +113,9 @@ Rules:
 - severity: 1 = minor annoyance, 2 = recurring friction, 3 = slows a team down, 4 = blocks merges/releases, 5 = serious cost, outages or security risk.
 - competitors: only code review, static analysis or PR tools EXPLICITLY named (e.g. SonarQube, CodeRabbit, GitHub Copilot code review,
   Graphite, Reviewable, Codacy, DeepSource, Qodo, Greptile, Sourcery, Cursor Bugbot, Semgrep, Snyk). Empty list if none.
-- Return exactly one result for EVERY post id. Never invent facts that are not in the post.`;
+- Return exactly one result for EVERY post id. Never invent facts that are not in the post.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 /** Describe the source signals in words Gemini can use as evidence. */
 function describeSignals(post: SourcePost): string {
@@ -136,7 +138,8 @@ async function classifyBatch(posts: SourcePost[], topics: Pick<Topic, "id" | "na
   const postText = posts
     .map(
       (p, i) =>
-        `### id: p${i + 1}\nsource: ${p.source}\ntitle: ${p.title}\ntext: ${p.snippet || "(no text)"}\n` +
+        `### id: p${i + 1}\nsource: ${p.source}\n` +
+        `<post>\ntitle: ${untrusted(p.title)}\ntext: ${untrusted(p.snippet) || "(no text)"}\n</post>\n` +
         `found by keyword: "${p.matchedKeyword}" (hint topic ${topicIdToKey.get(p.topicId) ?? "?"})\n` +
         `engagement: ${p.score} points, ${p.commentCount} comments/answers\nsource signals: ${describeSignals(p)}`,
     )

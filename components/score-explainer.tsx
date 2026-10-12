@@ -15,15 +15,29 @@ export type ScoreContext = {
   topTopic: string; // topic with the highest product (= score 100)
 };
 
-const SMOOTHING = 3; // must match lib/pipeline/scoring.ts
+import { MIN_SAMPLE, SMOOTHING } from "@/lib/pipeline/scoring";
 const f2 = (n: number) => n.toFixed(2);
 const f4 = (n: number) => n.toFixed(4);
 
 type Factor = { key: string; label: string; value: string; strength: number; detail: string; bar: React.ReactNode };
 
+/** Which comparison the growth factor used, in plain words. */
+function growthDetail(t: TopicCard): string {
+  const hn = `Hacker News keyword matches: ${t.keywordsLastWeek ?? 0} last week → ${t.keywordsThisWeek ?? 0} this week`;
+  switch (t.growthBasis) {
+    case "previous_run":
+      return `Mentions across all four sources compared with the previous weekly run (${t.vsPreviousRun}), smoothed with +${SMOOTHING} and kept between ×0.5 and ×2.`;
+    case "hn_keywords":
+      return `${hn} → (${t.keywordsThisWeek} + ${SMOOTHING}) ÷ (${t.keywordsLastWeek} + ${SMOOTHING}). Hacker News only; the +${SMOOTHING} smooths small numbers; kept between ×0.5 and ×2.`;
+    default:
+      return t.keywordsThisWeek === null
+        ? "No comparison data this week, so growth is neutral (×1)."
+        : `${hn}: fewer than ${MIN_SAMPLE} in total, too few to compare, so growth is neutral (×1).`;
+  }
+}
+
 export function ScoreExplainer({ topic: t, ctx }: { topic: TopicCard; ctx: ScoreContext }) {
   const c = t.components;
-  const hasTrend = t.keywordsThisWeek !== null && t.keywordsLastWeek !== null;
 
   const factors: Factor[] = [
     {
@@ -33,8 +47,8 @@ export function ScoreExplainer({ topic: t, ctx }: { topic: TopicCard; ctx: Score
       strength: c.frequency,
       detail:
         t.name === ctx.mostDiscussed
-          ? `${t.mentions} relevant posts: the most-discussed topic this week.`
-          : `${t.mentions} relevant posts vs ${ctx.maxMentions} for the most-discussed topic (${ctx.mostDiscussed}).`,
+          ? `${t.mentions} relevant ${t.mentions === 1 ? "post" : "posts"} across all four sources: the most-discussed topic this week.`
+          : `${t.mentions} relevant ${t.mentions === 1 ? "post" : "posts"} across all four sources, vs ${ctx.maxMentions} for the most-discussed topic (${ctx.mostDiscussed}).`,
       bar: <Bar fraction={c.frequency} />,
     },
     {
@@ -42,10 +56,7 @@ export function ScoreExplainer({ topic: t, ctx }: { topic: TopicCard; ctx: Score
       label: "Growth",
       value: `×${f2(c.growth)}`,
       strength: (c.growth - 0.5) / 1.5, // 0.5..2 mapped to 0..1
-      detail: hasTrend
-        ? `Hacker News keyword matches: ${t.keywordsThisWeek} this week vs ${t.keywordsLastWeek} last week → ` +
-          `(${t.keywordsThisWeek} + ${SMOOTHING}) ÷ (${t.keywordsLastWeek} + ${SMOOTHING}). The +${SMOOTHING} stops tiny numbers swinging the score; kept between ×0.5 and ×2.`
-        : "No trend data this week, so growth is neutral (×1).",
+      detail: growthDetail(t),
       bar: <GrowthBar growth={c.growth} />,
     },
     {
@@ -109,7 +120,7 @@ export function ScoreExplainer({ topic: t, ctx }: { topic: TopicCard; ctx: Score
           </p>
         </div>
         <p className="mt-1.5 text-[11px] text-ink-3">
-          {f4(ctx.maxRaw)} is this week&apos;s highest product ({ctx.topTopic}), so the best opportunity always scores 100.
+          {f4(ctx.maxRaw)} is this week&apos;s highest product ({ctx.topTopic}). The score is relative: the top topic always scores 100, so it ranks topics against each other rather than measuring market size.
         </p>
       </div>
     </details>

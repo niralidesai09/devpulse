@@ -16,12 +16,13 @@ automatically every Friday at 8 AM IST and emails him a brief before his enginee
 
 **0:20 – 0:50 · The dashboard (/).**
 Point at the KPI cards: "This week it read about 250 live posts from Hacker News, Stack Overflow, GitHub and DEV.to; Gemini Flash
-kept the relevant ones." Point at **Topics ranked by opportunity**: "Each topic has mentions, a trend vs last week, the share
-of unresolved problems and severity." Click **Why this score?** on the top topic: "The score is frequency × growth ×
+kept the relevant ones." Point at **Topics ranked by opportunity**: "Each topic shows mentions across all four sources, Hacker News keyword
+matches last week versus this week, the share of unresolved problems and severity." Click **Why this score?** on the top topic: "The score is frequency × growth ×
 unresolved × severity. Here is the exact maths, and anyone can recompute it. And these are the 3 real threads behind it."
 
 **0:50 – 1:10 · Trend chart.**
-"Trends work from the very first run: for both weeks we count Hacker News keyword matches the same way, so the comparison is fair."
+"This chart is Hacker News only, because it's the one source we can count the same way for both weeks. It's labelled
+that way, and when there are fewer than 5 matches it says 'too few to compare' instead of inventing a trend."
 
 **1:10 – 1:40 · Ask the Pulse.**
 Click the example **"Why do teams turn off AI code review bots?"**. "Gemini answers only from posts we found with Postgres
@@ -44,6 +45,28 @@ Open **/topics**: "Topics and keywords live in Supabase. Sumit edits them here w
 has finished: "Done: success · N relevant posts · brief emailed."
 
 ---
+
+## Data audit: 5 extra questions
+
+**A1. How do you know the data isn't made up?**
+`npm run verify:provenance` re-fetches stored posts from each source's official API and compares id, title, timestamp and URL.
+The last audit: 21 PASS, 3 WARN (explained: 2 Hacker News stories retitled by moderators, 1 Stack Overflow page that blocks scripts), 0 FAIL.
+
+**A2. What problems did the audit find?**
+Two runs were marked "success" although a source had failed requests; Hacker News results were silently cut at 100 per keyword;
+and the dashboard put an HN-only trend next to all-source mentions. All three are fixed and covered by tests.
+
+**A3. Does Groundswell see every post on these sites?**
+No. It reads what the four APIs return: GitHub Issues gives the newest 100 issues per search and DEV.to the newest 1,000 articles
+per tag, so busy weeks are sampled. Each run records these limits, and the brief's "About this data" lists them.
+
+**A4. How do you stop a post from hijacking the AI?**
+Collected text is wrapped in `<post>` tags with its angle brackets neutralised, and every prompt says that text inside the
+tags is data only: never instructions.
+
+**A5. Why isn't Reddit included?**
+Authorised access needs a Reddit OAuth app and acceptance of Reddit's Data API terms. We don't have those credentials, so it's
+blocked, and the app never claims to cover Reddit.
 
 ## 25 likely viva questions
 
@@ -96,21 +119,22 @@ accepted answer. For HN and DEV.to it reads the text (complaints with no working
 
 ### Trends and the Opportunity Score
 **12. How can you show a trend on the very first run?**
-Smart baseline: we ask Hacker News directly for keyword matches in this week's window and the 7 days before, counted the same
-way, so the % change is fair from day one.
+We ask Hacker News directly for keyword matches in this week's window and the 7 days before, counted the same way. It's
+labelled "Hacker News keyword matches", never "mentions", because mentions come from all four sources. From the second weekly
+run, mentions are also compared run against run, but only when every source was complete in both runs.
 
 **13. Why only Hacker News for the baseline?**
 It supports exact-phrase search over any date range with no tight limit. GitHub's search "secondary rate limit" blocked the
 extra searches every time we tested, DEV.to has no date search, and Stack Overflow had almost no matches.
 
 **14. What is the Opportunity Score?**
-frequency (mentions ÷ the top topic's mentions) × growth ((this week + 3) ÷ (last week + 3), kept between 0.5 and 2) ×
-unresolved share × severity ÷ 5. Then we divide by the week's highest product and multiply by 100, so the best opportunity
-is 100.
+A relative ranking: frequency (mentions ÷ the top topic's mentions) × growth ((this + 3) ÷ (previous + 3), kept between 0.5
+and 2, or ×1 when there are too few data points) × unresolved share × severity ÷ 5. Then we divide by the week's highest
+product and multiply by 100, so this week's top topic is 100. It ranks topics against each other; it does not measure market size.
 
-**15. Why add 3 in the growth factor?**
-Small numbers are noisy: 0 → 2 posts would otherwise look infinitely bigger. Adding 3 to both weeks gives 5 ÷ 3 = 1.67, so a
-tiny change can't dominate, while big real changes still show.
+**15. Why add 3 in the growth factor, and what if the numbers are tiny?**
+Adding 3 to both weeks smooths noise (16 → 10 gives 13 ÷ 19 = 0.68). And if both weeks together have fewer than 5 matches
+(e.g. 0 → 2) we don't claim a direction at all: the label says "too few to compare" and growth is neutral (×1).
 
 **16. How do we know "Why this score?" matches the real score?**
 It's built by code from the stored components, each component is rounded before multiplying, and we recomputed every formula

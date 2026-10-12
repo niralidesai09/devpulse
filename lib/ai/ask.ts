@@ -11,7 +11,7 @@
 import { z } from "zod";
 import { createServerClient } from "@/lib/db/supabase";
 import { SOURCE_LABEL } from "@/lib/format";
-import { generateJson } from "./gemini";
+import { generateJson, UNTRUSTED_CONTENT_RULE, untrusted } from "./gemini";
 
 const MAX_POSTS = 12;
 
@@ -31,7 +31,9 @@ Rules:
 - Cite every claim with the post ids in square brackets, e.g. [S2] or [S1, S4].
 - Counting is allowed only by counting the provided posts (say "in the posts found", not "developers in general").
 - If the posts do not answer the question, set enough_data to false and say briefly what is missing.
-- Never write URLs.`;
+- Never write URLs.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 export async function askThePulse(question: string): Promise<AskResult> {
   const { data: posts, error } = await createServerClient().rpc("search_posts", { q: question, max_results: MAX_POSTS });
@@ -44,15 +46,15 @@ export async function askThePulse(question: string): Promise<AskResult> {
     title: p.title as string,
     source: p.source as string,
     text:
-      `"${p.title}" (${SOURCE_LABEL[p.source as string] ?? p.source}, ${String(p.posted_at).slice(0, 10)})\n` +
-      `pain point: ${p.pain_point ?? "-"} | ${p.is_unresolved ? "unresolved" : "resolved"} | severity ${p.severity ?? "-"}/5` +
-      ((p.competitors as string[])?.length ? ` | tools: ${(p.competitors as string[]).join(", ")}` : "") +
-      `\nexcerpt: ${p.snippet ?? ""}`,
+      `(${SOURCE_LABEL[p.source as string] ?? p.source}, ${String(p.posted_at).slice(0, 10)})\n` +
+      `<post>\ntitle: ${untrusted(p.title as string)}\nexcerpt: ${untrusted(p.snippet as string)}\n</post>\n` +
+      `pain point: ${untrusted(p.pain_point as string) || "-"} | ${p.is_unresolved ? "unresolved" : "resolved"} | severity ${p.severity ?? "-"}/5` +
+      ((p.competitors as string[])?.length ? ` | tools: ${(p.competitors as string[]).join(", ")}` : ""),
   }));
 
   const result = await generateJson({
     system: SYSTEM_PROMPT,
-    prompt: `Question: ${question}\n\nPosts:\n${sources.map((s) => `[${s.ref}] ${s.text}`).join("\n\n")}`,
+    prompt: `Question (from Sumit): ${untrusted(question)}\n\nPosts:\n${sources.map((s) => `[${s.ref}] ${s.text}`).join("\n\n")}`,
     schema: AnswerSchema,
   });
 
@@ -60,11 +62,23 @@ export async function askThePulse(question: string): Promise<AskResult> {
     return { enoughData: false, answer: `${NOT_ENOUGH}\n\n${stripRefs(result.answer)}`.trim(), citations: [], postsFound: sources.length };
   }
 
-  // [S3] / [S1, S4] -> numbered links to the real threads; unknown ids removed.
+  const { answer, used } = linkCitations(result.answer, sources);
+
+  // An answer with no valid citation is not trustworthy -> treat as not enough data.
+  if (used.length === 0) return { enoughData: false, answer: NOT_ENOUGH, citations: [], postsFound: sources.length };
+  return { enoughData: true, answer, citations: used, postsFound: sources.length };
+}
+
+/**
+ * [S3] / [S1, S4] -> numbered links to the real threads. Unknown ids are
+ * removed, and any link or URL the model typed itself is stripped, so every
+ * remaining link points to a post that search actually found.
+ */
+export function linkCitations(text: string, sources: { ref: string; title: string; url: string; source: string }[]) {
   const byRef = new Map(sources.map((s) => [s.ref, s]));
   const used: Citation[] = [];
-  const answer = result.answer
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1") // links Gemini typed itself -> plain text
+  const answer = text
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, "$1") // links typed by the model -> plain text
     .replace(/https?:\/\/\S+/g, "")
     .replace(/\s*\[((?:S\d+\s*,?\s*)+)\]/g, (_, ids: string) => {
       const links = ids
@@ -78,10 +92,7 @@ export async function askThePulse(question: string): Promise<AskResult> {
         });
       return links.length ? ` ${links.join(" ")}` : "";
     });
-
-  // An answer with no valid citation is not trustworthy -> treat as not enough data.
-  if (used.length === 0) return { enoughData: false, answer: NOT_ENOUGH, citations: [], postsFound: sources.length };
-  return { enoughData: true, answer, citations: used, postsFound: sources.length };
+  return { answer, used };
 }
 
 const stripRefs = (text: string) => text.replace(/\s*\[((?:S\d+\s*,?\s*)+)\]/g, "");

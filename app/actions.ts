@@ -30,12 +30,12 @@ export async function lockAction(): Promise<void> {
 // ---------------------------------------------------------------------
 const TopicForm = z.object({
   id: z.string().uuid().optional(),
-  name: z.string().trim().min(2, "Name is too short").max(80, "Name is too long"),
-  description: z.string().trim().max(300, "Description is too long"),
+  name: z.string().trim().min(2, "Name must be at least 2 characters.").max(80, "Name must be 80 characters or fewer."),
+  description: z.string().trim().max(300, "Description must be 300 characters or fewer."),
   keywords: z
-    .array(z.string().trim().min(2, "Each keyword needs at least 2 characters").max(60, "A keyword is too long"))
-    .min(1, "Add at least one keyword")
-    .max(20, "Use at most 20 keywords"),
+    .array(z.string().trim().min(2, "Each keyword needs at least 2 characters.").max(60, "Each keyword must be 60 characters or fewer."))
+    .min(1, "Add at least one keyword.")
+    .max(20, "Use 20 keywords or fewer."),
   isActive: z.boolean(),
 });
 

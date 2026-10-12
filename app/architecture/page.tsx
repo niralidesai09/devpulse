@@ -22,7 +22,7 @@ export default function ArchitecturePage() {
           <Diagram />
         </div>
         <figcaption className="mt-2 text-xs text-ink-3">
-          Arrows show data flow. Blue boxes are the only places AI is used (Gemini Flash); numbers, trends and scores are computed by code.
+          Arrows show data flow. Blue boxes are the only places AI is used; numbers, trends and scores are computed by code.
         </figcaption>
       </figure>
 
@@ -32,10 +32,10 @@ export default function ArchitecturePage() {
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-ink-2 marker:text-ink-3">
             <li><b className="font-medium text-ink">Load topics</b> and keywords from Supabase (editable on /topics, no code changes).</li>
             <li><b className="font-medium text-ink">Collect</b> posts from Hacker News, Stack Overflow, GitHub Issues and DEV.to in parallel; dedupe by URL; keep the 300 most-engaged. A failing source never stops the run.</li>
-            <li><b className="font-medium text-ink">Classify</b> with Gemini Flash in batches of 25: topic (or &quot;other&quot; / irrelevant), pain point, unresolved + evidence, sentiment, severity, competitors. <i>At the same time</i>, count Hacker News keyword matches for this week and last week (the smart baseline).</li>
-            <li><b className="font-medium text-ink">Score</b> each topic in code: mentions, trend %, unresolved share, severity → Opportunity Score 0–100.</li>
-            <li><b className="font-medium text-ink">Radar</b>: Gemini groups &quot;other&quot; posts into suggested new topics; Sumit approves or rejects them.</li>
-            <li><b className="font-medium text-ink">Brief</b>: Gemini writes the 8-section brief using only the computed numbers; every claim links to a real thread.</li>
+            <li><b className="font-medium text-ink">Classify</b> with AI in batches of 25: topic (or &quot;other&quot; / irrelevant), pain point, unresolved + evidence, sentiment, severity, competitors. <i>At the same time</i>, count Hacker News keyword matches for this week and last week (the smart baseline).</li>
+            <li><b className="font-medium text-ink">Score</b> each topic in code: mentions (all sources), Hacker News keyword trend (with counts; &quot;too few to compare&quot; under 5 matches), unresolved share, severity → relative Opportunity Score 0–100.</li>
+            <li><b className="font-medium text-ink">Radar</b>: the AI groups &quot;other&quot; posts into suggested new topics; Sumit approves or rejects them.</li>
+            <li><b className="font-medium text-ink">Brief</b>: the AI writes the commentary for the brief using only the computed numbers; every claim links to a real thread.</li>
             <li><b className="font-medium text-ink">Email</b> it with Resend and show everything on the dashboard. The run is marked success, partial or failed per source.</li>
           </ol>
         </div>
@@ -134,9 +134,9 @@ function Diagram() {
     <svg viewBox="0 0 1000 590" className="h-auto w-full min-w-[860px]" role="img" aria-labelledby="diagram-title diagram-desc" fontFamily="var(--font-plex-sans), system-ui, sans-serif">
       <title id="diagram-title">Groundswell architecture</title>
       <desc id="diagram-desc">
-        Vercel Cron or the Run now button starts the weekly pipeline. Four live sources feed collection; Gemini Flash classifies posts;
-        code computes trends and scores; Gemini finds emerging topics and writes the brief; Resend emails it; everything is saved in Supabase
-        and shown on the Vercel dashboard. Ask the Pulse searches stored posts in Supabase and Gemini answers with citations.
+        Vercel Cron or the Run now button starts the weekly pipeline. Four live sources feed collection; the AI model (Gemini Flash) classifies posts;
+        code computes trends and scores; the AI finds emerging topics and writes the brief commentary; Resend emails it; everything is saved in Supabase
+        and shown on the Vercel dashboard. Ask the Pulse searches stored posts in Supabase and the AI answers with citations.
       </desc>
       <defs>
         <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -147,7 +147,7 @@ function Diagram() {
       {/* Legend */}
       <g fontSize={11} fill="var(--ink-2)">
         <rect x={740} y={18} width={14} height={14} rx={3} fill={FILL.ai} stroke={STROKE.ai} />
-        <text x={760} y={29}>Gemini Flash (AI)</text>
+        <text x={760} y={29}>AI step (Gemini Flash)</text>
         <rect x={740} y={40} width={14} height={14} rx={3} fill={FILL.external} stroke={STROKE.external} />
         <text x={760} y={51}>External service</text>
         <rect x={880} y={18} width={14} height={14} rx={3} fill={FILL.code} stroke={STROKE.code} />
@@ -180,15 +180,15 @@ function Diagram() {
       </text>
 
       <Box x={220} y={140} w={170} h={66} title="1 Collect & dedupe" sub="topics from Supabase" kind="code" />
-      <Box x={410} y={140} w={170} h={66} title="2 Classify" sub="Gemini · 25 per batch" kind="ai" />
+      <Box x={410} y={140} w={170} h={66} title="2 Classify" sub="AI · 25 per batch" kind="ai" />
       <Box x={600} y={140} w={170} h={66} title="3 Trend & score" sub="HN baseline · 0–100" kind="code" />
       <Arrow d="M390,173 L408,173" />
       <Arrow d="M580,173 L598,173" />
       <Arrow d="M685,206 L685,246 L305,246 L305,288" />
       <text x={495} y={240} textAnchor="middle" fontSize={10.5} fill="var(--ink-3)">save posts + topic stats</text>
 
-      <Box x={220} y={290} w={170} h={66} title="4 Emerging radar" sub="Gemini · new topics" kind="ai" />
-      <Box x={410} y={290} w={170} h={66} title="5 Write brief" sub="Gemini · real links" kind="ai" />
+      <Box x={220} y={290} w={170} h={66} title="4 Emerging radar" sub="AI · new topics" kind="ai" />
+      <Box x={410} y={290} w={170} h={66} title="5 Write brief" sub="AI text · real links" kind="ai" />
       <Box x={600} y={290} w={170} h={66} title="6 Email" sub="Resend" kind="external" />
       <Arrow d="M390,323 L408,323" />
       <Arrow d="M580,323 L598,323" />
@@ -219,7 +219,7 @@ function Diagram() {
       <Box x={200} y={522} w={130} h={48} title="Question" sub="from the dashboard" kind="code" />
       <Box x={350} y={522} w={130} h={48} title="/api/ask" sub="validate · rate limit" kind="code" />
       <Box x={500} y={522} w={150} h={48} title="search_posts()" sub="Postgres full-text" kind="data" />
-      <Box x={670} y={522} w={150} h={48} title="Gemini answers" sub="only from found posts" kind="ai" />
+      <Box x={670} y={522} w={150} h={48} title="AI answer" sub="only from found posts" kind="ai" />
       <Arrow d="M330,546 L348,546" />
       <Arrow d="M480,546 L498,546" />
       <Arrow d="M650,546 L668,546" />

@@ -34,7 +34,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <div className="flex-1">{children}</div>
         <footer className="border-t border-line">
           <p className="mx-auto max-w-6xl px-4 py-4 text-xs text-ink-3 sm:px-6">
-            Live data from Hacker News, GitHub Issues, Stack Overflow and DEV.to · analysis by Google Gemini Flash · runs every Friday 8:00 AM IST
+            Data from Hacker News, GitHub Issues, Stack Overflow and DEV.to · AI-assisted analysis (
+            <Link href="/architecture" className="underline decoration-line underline-offset-2 hover:text-ink">
+              how it works
+            </Link>
+            ) · updated every Friday at 8:00 AM IST
           </p>
         </footer>
       </body>

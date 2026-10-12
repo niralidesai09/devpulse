@@ -15,7 +15,7 @@ export const fmtDateTime = (iso: string | null) =>
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
-      }) + " IST"
+      }).replace(/\b(am|pm)\b/i, (m) => m.toUpperCase()) + " IST"
     : "–";
 
 export function fmtDuration(startIso: string, endIso: string | null): string {
@@ -26,7 +26,7 @@ export function fmtDuration(startIso: string, endIso: string | null): string {
 
 export const SOURCE_LABEL: Record<string, string> = {
   hackernews: "Hacker News",
-  github: "GitHub",
+  github: "GitHub Issues",
   devto: "DEV.to",
   stackoverflow: "Stack Overflow",
 };

@@ -22,12 +22,25 @@ Every claim in the brief links to the real thread it came from.
 |---|---|
 | Friday brief (8 sections: TL;DR, top pain points table, rising & falling, unresolved problems, emerging topics, competitor radar, sales objections, 3 things for Monday sprint planning), emailed with Resend | Email + `/` |
 | Opportunity Score 0–100 per topic, with a **"Why this score?"** breakdown and the top 3 evidence threads | `/` |
-| Week-over-week trend chart (works from the very first run thanks to a smart baseline) | `/` |
+| Week-over-week chart of Hacker News keyword matches (clearly labelled as Hacker News only) | `/` |
 | **Emerging Topic Radar**: Gemini suggests new topics; approve with one click and they're monitored next week | `/` |
 | **Competitor & Objection Radar**: tool mentions + sentiment, likely sales objections with honest responses | `/` |
 | **Ask the Pulse**: ask a question, get an answer only from collected posts, with links | `/#ask` |
 | Add / edit / pause topics and keywords without code changes | `/topics` |
 | Run history with per-source status; protected **Run now** button for live demos | `/runs`, `/` |
+
+## What the numbers mean
+
+| Metric | Meaning |
+|---|---|
+| **Mentions (all sources)** | Relevant posts per topic in the last 7 days across Hacker News, GitHub Issues, Stack Overflow and DEV.to, each discussion counted once. |
+| **Hacker News keyword matches** | Exact-phrase keyword matches on Hacker News only, last week → this week. Fewer than 5 in total is shown as "too few to compare". |
+| **vs previous run** | Mentions compared with the previous weekly run, only when every source was complete in both runs (available from the second weekly run). |
+| **Opportunity Score** | A relative ranking (0–100) of this week's topics: frequency × growth × unresolved share × severity, with the top topic = 100. Not an absolute measure of market size. |
+
+Coverage is limited to what the four APIs return: GitHub Issues reads the newest 100 issues per search and DEV.to the newest 1,000
+articles per tag, so busy weeks are sampled rather than fully covered. Each run records these limits ("coverage notes") on `/runs`
+and in the brief. Full details: [docs/DATA_AUDIT.md](docs/DATA_AUDIT.md).
 
 ## Tech stack
 
@@ -125,6 +138,21 @@ lib/db/         Supabase clients and queries
 supabase/       SQL migrations
 docs/           Components Map
 ```
+
+## Tests and verification
+
+```bash
+npm test
+```
+
+31 unit tests (no network): source normalisation, deduplication, attribution, evidence links, metrics, zero baselines, AI schema
+validation, invalid URLs and partial runs.
+
+```bash
+npm run verify:provenance -- 8
+```
+
+Re-fetches a sample of stored posts from each source's official API and checks id, title, timestamp and URL (PASS / WARN / FAIL).
 
 ## Debug endpoints (local dev open; production needs `Authorization: Bearer CRON_SECRET`)
 

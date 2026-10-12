@@ -219,4 +219,19 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 
 - 2026-10-12 fix: the live site rejected the admin passcode. Cause: `ADMIN_PASSCODE` was stored wrongly in Vercel by the stdin-piped `vercel env add` (pulled sensitive values are masked, so it couldn't be compared). Regenerated a readable passcode (word-word-1234) in .env.local, re-added with `vercel env add ADMIN_PASSCODE production --value "$P" --sensitive --yes`, redeployed. Verified by sending the HMAC cookie to the live `/` → `"unlocked":true`. Use `--value` (not stdin) when setting Vercel env vars.
 
+### Final audit — data integrity, provenance, metrics, copy ✅ (2026-10-12)
+Full report: `docs/DATA_AUDIT.md`. Key changes:
+- Sources report `ok | partial | failed` (`runSafely`); `decideRunStatus` makes ANY non-ok source → run `partial`. 2 historic runs wrongly marked success were corrected to partial in the DB (`stats.statusCorrectedByAudit`).
+- Coverage notes instead of silent truncation: HN exact-phrase search + pagination (≤ 5×100 per keyword; same matching as the baseline); GitHub notes when total_count > 100 and uses an exact window timestamp + local check; DEV.to notes when 1,000 newest don't reach the window start (25s timeout); SO notes if > 500.
+- Collector: rejects links not `https://` on the source's own host (`hasValidSourceUrl`), dedupes by `source:externalId` AND canonical URL (`dedupePosts`), reports `rejected {invalidUrl, duplicates, overCap}`.
+- Provenance: `posts.retrieved_at` (migration `audit_provenance_and_trend_states`, file 0007), `toPostRow` keeps source / provenance / AI columns separate; column comments document which is which.
+- Metrics (`scoring.ts`): "Mentions (all sources)" vs "Hacker News keyword matches" (labels always carry counts, e.g. "16 → 10 (▼ 37%)"); `MIN_SAMPLE = 5` → `low_data` "too few to compare" (no %, growth ×1); "new" = "new in HN data"; comparison with a previous weekly run (window 6–8 days earlier) only when every source was ok in both (`trend_detail.previousRun`, `growthBasis`); Opportunity Score explicitly relative. "Fastest rising (Hacker News)" only from up/new trends, else "None with enough data".
+- Prompt-injection guard: `UNTRUSTED_CONTENT_RULE` + `untrusted()` wrap collected text in <post> tags in classify, radar, brief and Ask.
+- Brief: renamed columns, Recommendations label, "About this data" (code-generated: sources queried + status, coverage notes, cleaning, relevance, small samples); no model name in the brief.
+- Gemini visible only on /architecture (+ stored briefs.model / runs.stats.model). Footer: "AI-assisted analysis (how it works)".
+- Copy: "GitHub Issues" everywhere, AM/PM, validation sentences, Opportunity Score capitalisation, chart labels de-duplicated.
+- Tests: Vitest (`npm test`) 31 passing; mutation check confirmed. `npm run verify:provenance -- 8` → PASS 21 · WARN 3 (2 HN parent stories retitled, 1 SO Cloudflare page) · FAIL 0.
+- Reddit: not integrated (needs OAuth app credentials + Data API terms) → BLOCKED, not claimed anywhere.
+- Known limits: GitHub coverage = newest 100 per query (audited run spans 10–12 Oct only); DEV.to busy tags reach only part of the week; HN comment titles can lag moderator retitles.
+
 **All roadmap steps complete.**

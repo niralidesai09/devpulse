@@ -14,7 +14,7 @@ const SERIES = [
 
 const shorten = (name: string, max = 22) => (name.length > max ? name.slice(0, max - 1).trimEnd() + "…" : name);
 
-// Left-hand label, two lines: topic name, then "this vs last · change".
+// Left-hand label, two lines: topic name, then "last → this week (change)".
 // This puts the actual numbers next to every pair of bars.
 // Recharts passes x, y and payload; we pass byTopic ourselves.
 function TopicTick({
@@ -37,7 +37,7 @@ function TopicTick({
         {shorten(d.topic)}
       </tspan>
       <tspan x={Number(x) - 6} dy={15} fill="var(--ink-3)" fontSize={11} className="tabular">
-        {d.thisWeek} vs {d.lastWeek} · {d.trendLabel}
+        {d.trendLabel}
       </tspan>
     </text>
   );
@@ -79,7 +79,7 @@ export function TrendChart({ data }: { data: TrendDatum[] }) {
       </div>
 
       <figcaption className="mt-2 text-xs text-ink-3">
-        Hacker News posts and comments matching each topic&apos;s keywords. Small numbers swing a lot week to week.
+        Hacker News only: stories and comments matching each topic&apos;s keywords. Small numbers swing a lot from week to week.
       </figcaption>
 
       {/* Same numbers as a table, for screen readers and anyone who prefers it. */}
@@ -89,8 +89,8 @@ export function TrendChart({ data }: { data: TrendDatum[] }) {
           <thead className="text-ink-3">
             <tr>
               <th className="py-1 font-medium">Topic</th>
-              <th className="py-1 text-right font-medium">This week</th>
               <th className="py-1 text-right font-medium">Last week</th>
+              <th className="py-1 text-right font-medium">This week</th>
               <th className="py-1 text-right font-medium">Change</th>
             </tr>
           </thead>
@@ -98,8 +98,8 @@ export function TrendChart({ data }: { data: TrendDatum[] }) {
             {data.map((d) => (
               <tr key={d.topic} className="border-t border-line">
                 <td className="py-1 pr-2">{d.topic}</td>
-                <td className="py-1 text-right">{d.thisWeek}</td>
                 <td className="py-1 text-right">{d.lastWeek}</td>
+                <td className="py-1 text-right">{d.thisWeek}</td>
                 <td className="py-1 text-right">{d.trendLabel}</td>
               </tr>
             ))}

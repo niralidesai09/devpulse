@@ -58,7 +58,7 @@ Dashboard (Next.js on Vercel) reads Supabase  ·  Ask the Pulse: question → /a
 | Component | File | What it does | Service |
 |---|---|---|---|
 | Smart baseline | `lib/pipeline/baseline.ts` | Exact-phrase keyword counts for this week and the previous 7 days, so trends work from the very first run. | HN Algolia API |
-| Scoring | `lib/pipeline/scoring.ts` | Trend % (▲ / ▼ / new) and Opportunity Score = frequency × growth × unresolved × severity, scaled so the best topic = 100. | — |
+| Scoring | `lib/pipeline/scoring.ts` | Hacker News keyword trend with counts ("too few to compare" under 5 matches), comparison with the previous comparable weekly run, and the relative Opportunity Score (top topic = 100). | — |
 | Pipeline | `lib/pipeline/run.ts` | Orchestrates one run and records timings, errors and status. | Vercel Functions |
 
 ### Storage, email, UI
@@ -70,6 +70,13 @@ Dashboard (Next.js on Vercel) reads Supabase  ·  Ask the Pulse: question → /a
 | `/topics` | `app/topics/page.tsx` | Add / edit / pause topics and keywords (passcode). | Next.js on Vercel |
 | `/runs` | `app/runs/page.tsx` | Run history with per-source status, brief and email status. | Next.js on Vercel |
 | `/architecture` | `app/architecture/page.tsx` | This map plus the diagram. | Next.js on Vercel |
+
+### Quality checks
+| Component | File | What it does | Service |
+|---|---|---|---|
+| Unit tests | `tests/*.test.ts` (`npm test`) | 31 tests: normalisation, dedupe, attribution, evidence links, metrics, zero baselines, AI schema validation, invalid URLs, partial runs. | Vitest |
+| Provenance check | `scripts/verify-provenance.mjs` (`npm run verify:provenance`) | Re-fetches sampled posts from the official source APIs and compares id, title, time and URL. | HN, GitHub, Stack Exchange, DEV.to APIs |
+| Data audit | `docs/DATA_AUDIT.md` | Source verification table, metric definitions, findings and limits. | — |
 
 ## External services
 | Service | Used for | Key / config |

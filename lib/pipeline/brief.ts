@@ -11,15 +11,15 @@
 //      real links. Unknown ids and any URL Gemini types itself are removed.
 
 import { z } from "zod";
-import { generateJson, getModel, ThinkingLevel } from "@/lib/ai/gemini";
+import { generateJson, getModel, ThinkingLevel, UNTRUSTED_CONTENT_RULE, untrusted } from "@/lib/ai/gemini";
 import { createServerClient } from "@/lib/db/supabase";
-import { formatTrend, type Trend } from "./scoring";
+import { formatRunComparison, formatTrend, MIN_SAMPLE, type Trend, type TrendDetail } from "./scoring";
 
 const MAX_EVIDENCE = 120; // most-engaged posts given to Gemini
 
 const SOURCE_LABEL: Record<string, string> = {
   hackernews: "Hacker News",
-  github: "GitHub",
+  github: "GitHub Issues",
   devto: "DEV.to",
   stackoverflow: "Stack Overflow",
 };
@@ -27,7 +27,7 @@ const SOURCE_LABEL: Record<string, string> = {
 // ---------------------------------------------------------------------
 // 1. Load everything the brief needs from the database.
 // ---------------------------------------------------------------------
-type Evidence = {
+export type Evidence = {
   ref: string; // E1, E2, ...
   url: string;
   source: string;
@@ -43,8 +43,9 @@ type Evidence = {
 
 type TopicRow = {
   topic: string;
-  mentions: number;
-  trend: string; // "▲ 25%", "new", ...
+  mentionsAllSources: number; // relevant posts this week, all four sources
+  hnKeywordTrend: string; // "11 → 19 (▲ 73%)", "2 → 0 (too few to compare)" (Hacker News only)
+  vsPreviousRun: string; // mentions vs the previous weekly run, or why not comparable
   keywordMatchesThisWeek: number | null;
   keywordMatchesLastWeek: number | null;
   unresolvedPct: number;
@@ -62,7 +63,8 @@ export type BriefData = {
   windowEnd: string;
   postsCollected: number;
   postsKept: number;
-  sourcesOk: string[];
+  sources: { name: string; status: string; count: number; notes: string[] }[]; // every source queried
+  rejected: { invalidUrl: number; duplicates: number; overCap: number } | null;
   topics: TopicRow[];
   competitors: CompetitorRow[];
   evidence: Evidence[];
@@ -108,8 +110,9 @@ export async function loadBriefData(runId: string): Promise<BriefData> {
 
   const topicRows: TopicRow[] = (stats ?? []).map((s) => ({
     topic: topicName.get(s.topic_id) ?? "Unknown",
-    mentions: s.mention_count,
-    trend: formatTrend(s.trend as Trend, s.change_pct === null ? null : Number(s.change_pct)),
+    mentionsAllSources: s.mention_count,
+    hnKeywordTrend: formatTrend(s.trend as Trend, s.change_pct === null ? null : Number(s.change_pct), s.baseline_this_week, s.baseline_last_week),
+    vsPreviousRun: formatRunComparison(s.mention_count, s.trend_detail as TrendDetail),
     keywordMatchesThisWeek: s.baseline_this_week,
     keywordMatchesLastWeek: s.baseline_last_week,
     unresolvedPct: s.mention_count ? Math.round((s.unresolved_count / s.mention_count) * 100) : 0,
@@ -131,9 +134,14 @@ export async function loadBriefData(runId: string): Promise<BriefData> {
     }))
     .sort((a, b) => b.mentions - a.mentions);
 
-  const sourcesOk = Object.entries((run.sources_status ?? {}) as Record<string, { ok: boolean }>)
-    .filter(([, s]) => s.ok)
-    .map(([name]) => SOURCE_LABEL[name] ?? name);
+  // Every source that was queried, with its real outcome (not just the ones that worked).
+  type RawStatus = { ok: boolean; status?: string; count?: number; notes?: string[] };
+  const sources = Object.entries((run.sources_status ?? {}) as Record<string, RawStatus>).map(([name, st]) => ({
+    name: SOURCE_LABEL[name] ?? name,
+    status: st.status ?? (st.ok ? "ok" : "failed"),
+    count: st.count ?? 0,
+    notes: st.notes ?? [],
+  }));
 
   return {
     runId,
@@ -141,7 +149,8 @@ export async function loadBriefData(runId: string): Promise<BriefData> {
     windowEnd: run.window_end,
     postsCollected: run.stats?.postsCollected ?? 0,
     postsKept: run.stats?.postsKept ?? posts?.length ?? 0,
-    sourcesOk,
+    sources,
+    rejected: run.stats?.rejected ?? null,
     topics: topicRows,
     competitors,
     evidence,
@@ -156,10 +165,10 @@ const evidenceIds = z.array(z.string()).describe("Evidence ids like E3 that supp
 
 const BriefSchema = z.object({
   tldr: z.array(z.string()).length(3).describe("Exactly 3 one-sentence bullets for a busy PM, with [E#] citations"),
-  rising_falling: z.string().describe("Markdown bullets: which topics are rising and falling and why, with [E#] citations"),
+  rising_falling: z.string().describe("Markdown bullets: which topics are rising or falling ACCORDING TO hnKeywordTrend (say 'Hacker News keyword matches'), or vsPreviousRun when comparable; topics marked 'too few to compare' must be described as having too little data. [E#] citations for any claim about what developers say."),
   unresolved: z.string().describe("Markdown bullets: specific problems still unsolved or underserved by existing tools, with [E#] citations"),
   emerging: z.string().describe("Markdown bullets: the radar's suggestedNewTopics (and other recurring pain points in evidence whose topic is 'Not monitored yet'), with [E#] citations. Mention they await Sumit's approval on the dashboard. Say so plainly if there are none."),
-  competitor_commentary: z.string().describe("1-3 sentences on what developers say about competitor tools, with [E#] citations"),
+  competitor_commentary: z.string().describe("1-3 sentences on what developers say about competitor tools, with [E#] citations. Say if the number of posts is small."),
   objections: z
     .array(z.object({ objection: z.string(), response: z.string(), evidence: evidenceIds }))
     .min(2)
@@ -171,18 +180,28 @@ const BriefSchema = z.object({
 type BriefJson = z.infer<typeof BriefSchema>;
 
 const SYSTEM_PROMPT = `You write the Friday brief for Sumit, the sole PM at a 15-person startup that sells a CODE REVIEW AUTOMATION tool to mid-size engineering teams.
-He reads it before his afternoon engineering sync and uses it for Monday sprint planning. Be concrete, plain and short.
+He reads it before his afternoon engineering sync and uses it for Monday sprint planning. Write clear, concise, professional English.
 
 STRICT RULES:
 - Use ONLY numbers that appear in STATS. Never estimate, add up or invent counts or percentages.
+- Two different measurements exist; never mix them up:
+  * mentionsAllSources = relevant posts this week across Hacker News, GitHub Issues, Stack Overflow and DEV.to.
+  * hnKeywordTrend = Hacker News keyword matches last week → this week (Hacker News ONLY). Call it "Hacker News keyword matches", never "mentions".
+  * vsPreviousRun compares mentionsAllSources with the previous weekly run when one exists and is comparable.
+  Never describe an HN-only change as a change in overall mentions.
+- "too few to compare" means there is not enough data: do not call that topic rising or falling.
+  "new in HN data" means newly observed in the collected Hacker News data, not proven new in the wider market.
 - Every claim about what developers say must cite evidence ids in square brackets, e.g. [E3] or [E3, E12]. Only use ids from EVIDENCE.
-- Never write URLs or links yourself. Code turns [E#] into real links.
+  If the evidence for a claim is thin (one or two posts), say so instead of generalising.
+- Never write URLs or links yourself. Code turns [E#] into real links. Never invent quotes.
 - Do not add headings; each field is inserted under a heading by code.
-- Trend % is based on Hacker News keyword matches this week vs last week; small numbers are noisy, say so when it matters.
-- Sales objections: objections that developers or engineering leads would raise against adopting automated code review, grounded in the evidence.
+- Do not name the AI model or describe yourself.
+- Sales objections: objections developers or engineering leads would raise against adopting automated code review, grounded in the evidence.
   You do NOT know what Sumit's product can do, so never claim it has a feature. Write the suggested response as an honest talking point:
-  acknowledge the concern, then say what to show, measure or offer in the demo (e.g. "show the false-positive rate on their own repo").
-- Sprint items: 3 actionable product/engineering items for Sumit's team, each tied to evidence.`;
+  acknowledge the concern, then say what to show, measure or offer in a demo (e.g. "show the false-positive rate on their own repository").
+- Sprint items are RECOMMENDATIONS, not observed facts: 3 actionable product or engineering items, each tied to evidence.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 function buildPrompt(d: BriefData): string {
   const stats = {
@@ -196,7 +215,7 @@ function buildPrompt(d: BriefData): string {
   const evidence = d.evidence
     .map(
       (e) =>
-        `${e.ref} | ${SOURCE_LABEL[e.source] ?? e.source} | topic: ${e.topic} | "${e.title}" | pain: ${e.painPoint} | ` +
+        `${e.ref} | ${SOURCE_LABEL[e.source] ?? e.source} | topic: ${e.topic} | <post>${untrusted(e.title)}</post> | pain: ${untrusted(e.painPoint)} | ` +
         `${e.isUnresolved ? "UNRESOLVED" : "resolved"} (${e.unresolvedReason}) | severity ${e.severity} | sentiment ${e.sentiment}` +
         (e.competitors.length ? ` | tools: ${e.competitors.join(", ")}` : ""),
     )
@@ -207,7 +226,7 @@ function buildPrompt(d: BriefData): string {
 // ---------------------------------------------------------------------
 // 3. Turn [E#] citations into real links, and remove anything else.
 // ---------------------------------------------------------------------
-function makeLinker(d: BriefData) {
+export function makeLinker(d: Pick<BriefData, "evidence">) {
   const byRef = new Map(d.evidence.map((e) => [e.ref, e]));
   const used = new Set<string>();
   let unknownRefs = 0;
@@ -245,7 +264,7 @@ function makeLinker(d: BriefData) {
 }
 
 /** Numbers Gemini wrote that do not appear anywhere in its input. */
-function findUnverifiedNumbers(written: string, input: string): string[] {
+export function findUnverifiedNumbers(written: string, input: string): string[] {
   const allowed = new Set(input.match(/\d+(?:\.\d+)?/g) ?? []);
   const found = written.replace(/\[E\d+[^\]]*\]/g, "").match(/\d+(?:\.\d+)?/g) ?? [];
   return [...new Set(found.filter((n) => !allowed.has(n)))];
@@ -263,8 +282,8 @@ function render(d: BriefData, g: BriefJson, linker: ReturnType<typeof makeLinker
 
   out.push(`# Groundswell Friday Brief — week ending ${fmtDate(d.windowEnd)}`);
   out.push(
-    `_Week ${fmtDate(d.windowStart)} – ${fmtDate(d.windowEnd)} · ${d.postsCollected} live posts from ${d.sourcesOk.join(", ")} · ` +
-      `${d.postsKept} relevant after AI filtering_`,
+    `_Week ${fmtDate(d.windowStart)} – ${fmtDate(d.windowEnd)} · ${d.postsCollected} posts collected from ` +
+      `${d.sources.map((s) => s.name).join(", ")} · ${d.postsKept} relevant after AI-assisted filtering_`,
   );
 
   out.push(`## 1. TL;DR`);
@@ -273,22 +292,25 @@ function render(d: BriefData, g: BriefJson, linker: ReturnType<typeof makeLinker
   out.push(`## 2. Top pain points`);
   out.push(
     [
-      "| # | Topic | Mentions | Trend vs last week | Unresolved | Opportunity score |",
+      "| # | Topic | Mentions (all sources) | Hacker News keyword matches (last week → this week) | Unresolved | Opportunity Score |",
       "|---|---|---:|---|---:|---:|",
       ...d.topics.map(
-        (t, i) => `| ${i + 1} | ${t.topic} | ${t.mentions} | ${t.trend} | ${t.unresolvedPct}% | **${t.opportunityScore}** |`,
+        (t, i) =>
+          `| ${i + 1} | ${t.topic} | ${t.mentionsAllSources} | ${t.hnKeywordTrend} | ${t.unresolvedPct}% | **${t.opportunityScore}** |`,
       ),
     ].join("\n"),
   );
   out.push(
-    "_Mentions = relevant posts this week. Trend = Hacker News keyword matches, this week vs the 7 days before. " +
-      "Opportunity score (0–100) = frequency × growth × unresolved share × severity; 100 = biggest opportunity this week._",
+    "_**Mentions** = relevant posts this week across Hacker News, GitHub Issues, Stack Overflow and DEV.to. " +
+      "**Hacker News keyword matches** compare this week with the 7 days before, on Hacker News only; " +
+      `fewer than ${MIN_SAMPLE} matches in total is marked "too few to compare". ` +
+      "**Opportunity Score** is relative (0–100): frequency × growth × unresolved share × severity, where this week's top topic = 100. It is not an absolute measure of market size._",
   );
 
-  out.push(`## 3. Rising & falling`);
+  out.push(`## 3. Rising and falling`);
   out.push(clean(g.rising_falling));
 
-  out.push(`## 4. Unresolved / underserved problems`);
+  out.push(`## 4. Unresolved and underserved problems`);
   out.push(clean(g.unresolved));
 
   out.push(`## 5. Emerging topics not yet monitored`);
@@ -298,7 +320,7 @@ function render(d: BriefData, g: BriefJson, linker: ReturnType<typeof makeLinker
   if (d.competitors.length) {
     out.push(
       [
-        "| Tool | Mentions | Avg sentiment (−1 to 1) | Threads |",
+        "| Tool | Mentions | Average sentiment (−1 to 1) | Threads |",
         "|---|---:|---:|---|",
         ...d.competitors.map((c) => `| ${c.tool} | ${c.mentions} | ${c.avgSentiment} | ${links(c.evidence).trim().replace(/^\(|\)$/g, "")} |`),
       ].join("\n"),
@@ -309,20 +331,43 @@ function render(d: BriefData, g: BriefJson, linker: ReturnType<typeof makeLinker
   out.push(clean(g.competitor_commentary));
 
   out.push(`## 7. Likely sales objections`);
+  out.push("_Objections are drawn from this week's threads; the responses are suggestions._");
   out.push(
     g.objections
       .map((o) => `- **“${cleanNoRefs(o.objection)}”**${links(o.evidence)}\n  - _Suggested response:_ ${cleanNoRefs(o.response)}`)
       .join("\n"),
   );
 
-  out.push(`## 8. Bring these 3 things to Monday sprint planning`);
+  out.push(`## 8. Recommendations: bring these 3 things to Monday sprint planning`);
   out.push(g.sprint.map((s, i) => `${i + 1}. **${cleanNoRefs(s.title)}** — ${cleanNoRefs(s.why)}${links(s.evidence)}`).join("\n"));
 
   out.push("---");
-  out.push(
-    `_Generated by Groundswell. All numbers are computed from live data; the text is written by Google Gemini (${getModel()}) and every claim links to the real thread._`,
-  );
+  out.push(`## About this data`);
+  out.push(aboutThisData(d));
   return out.join("\n\n");
+}
+
+/** Plain facts about coverage and method, written by code (no AI). */
+export function aboutThisData(d: Pick<BriefData, "sources" | "rejected" | "postsCollected" | "postsKept" | "topics">): string {
+  const lines: string[] = [];
+  lines.push(
+    `- **Sources queried:** ${d.sources
+      .map((s) => `${s.name} (${s.count} ${s.count === 1 ? "match" : "matches"}${s.status === "ok" ? "" : `, ${s.status === "partial" ? "some requests failed" : "failed"}`})`)
+      .join(", ")}. No other sites were searched.`,
+  );
+  const notes = d.sources.flatMap((s) => s.notes.map((n) => `${s.name}: ${n}`));
+  if (notes.length) lines.push(`- **Coverage limits (${notes.length}):** ${notes.slice(0, 4).join("; ")}${notes.length > 4 ? "; …" : ""}.`);
+  if (d.rejected) {
+    lines.push(
+      `- **Cleaning:** ${d.rejected.duplicates} duplicate${d.rejected.duplicates === 1 ? "" : "s"} merged, ` +
+        `${d.rejected.invalidUrl} record${d.rejected.invalidUrl === 1 ? "" : "s"} with an invalid link dropped, ${d.rejected.overCap} over the 300-post cap.`,
+    );
+  }
+  lines.push(`- **Relevance:** ${d.postsKept} of ${d.postsCollected} collected posts were judged relevant (AI-assisted classification).`);
+  const thin = d.topics.filter((t) => t.mentionsAllSources > 0 && t.mentionsAllSources < 3).map((t) => t.topic);
+  if (thin.length) lines.push(`- **Small samples:** ${thin.join(", ")} ${thin.length === 1 ? "has" : "have"} fewer than 3 mentions; treat as early signals.`);
+  lines.push("- All counts, trends and scores are computed by code from the stored posts; the commentary is AI-assisted and every claim links to its source thread.");
+  return lines.join("\n");
 }
 
 export type Objection = {

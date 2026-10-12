@@ -45,12 +45,23 @@ export const devToAdapter: SourceAdapter = {
 
   fetchPosts(topics, since) {
     return runSafely("devto", async () => {
+      const notes: string[] = [];
       const { results, errors } = await mapWithLimit(TAGS, 3, async (tag) => {
         // /articles/latest = newest first, up to 1000 per page. Busy tags
         // (e.g. "ai") get 1000+ posts a day, so 100 covered only a few hours.
         const articles = await fetchJson<DevArticle[]>(
           `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=1000`,
+          {},
+          25_000, // 1,000 articles is a large response: allow 25s
         );
+        const retrievedAt = new Date().toISOString();
+        // If even the oldest of the 1,000 is inside the window, older articles
+        // from this week were not reached: record how much of the week we saw.
+        const oldest = articles.at(-1);
+        if (articles.length >= 1000 && oldest && new Date(oldest.published_at) > since) {
+          const hours = Math.round((Date.now() - new Date(oldest.published_at).getTime()) / 3_600_000);
+          notes.push(`#${tag}: 1,000 newest articles cover only the last ${hours} h of the week`);
+        }
 
         const posts: SourcePost[] = [];
         for (const a of articles) {
@@ -71,6 +82,7 @@ export const devToAdapter: SourceAdapter = {
             score: a.positive_reactions_count,
             commentCount: a.comments_count,
             postedAt: a.published_at,
+            retrievedAt,
             matchedKeyword: match.keyword,
             topicId: match.topicId,
             signals: {},
@@ -79,7 +91,7 @@ export const devToAdapter: SourceAdapter = {
         return posts;
       });
 
-      return { posts: results.flat(), errors, requests: TAGS.length };
+      return { posts: results.flat(), errors, requests: TAGS.length, notes };
     });
   },
 };

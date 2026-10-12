@@ -37,8 +37,15 @@ export const COMPONENT_GROUPS: { title: string; items: Component[] }[] = [
     title: "Analysis (code, no AI)",
     items: [
       { name: "Smart baseline", file: "lib/pipeline/baseline.ts", does: "Exact-phrase keyword counts for this week and the 7 days before, so trends work from the first run.", service: "HN Algolia API" },
-      { name: "Scoring", file: "lib/pipeline/scoring.ts", does: "Trend % (▲/▼/new) and Opportunity Score = frequency × growth × unresolved × severity, scaled 0–100.", service: "—" },
+      { name: "Scoring", file: "lib/pipeline/scoring.ts", does: "Hacker News keyword trend with counts ('too few to compare' under 5 matches), comparison with the previous comparable weekly run, and the relative Opportunity Score (top topic = 100).", service: "—" },
       { name: "Pipeline", file: "lib/pipeline/run.ts", does: "Orchestrates one run: collect → classify + baseline → save → score → radar → brief → email → status.", service: "Vercel Functions (max 300 s)" },
+    ],
+  },
+  {
+    title: "Quality checks",
+    items: [
+      { name: "Unit tests", file: "tests/*.test.ts (npm test)", does: "31 tests: normalisation, dedupe, attribution, evidence links, metrics, zero baselines, AI schema validation, invalid URLs, partial runs.", service: "Vitest" },
+      { name: "Provenance check", file: "scripts/verify-provenance.mjs", does: "Re-fetches sampled posts from the official source APIs and compares id, title, time and URL.", service: "Source APIs" },
     ],
   },
   {

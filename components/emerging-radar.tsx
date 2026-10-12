@@ -28,7 +28,7 @@ export function EmergingRadar({
 
       {pending.length === 0 ? (
         <p className="mt-3 rounded-xl border border-dashed border-line bg-surface p-4 text-sm text-ink-3">
-          No new topics suggested this week. Everything relevant fitted a monitored topic.
+          No new topic suggestions this week.
         </p>
       ) : (
         <ul className="mt-3 grid gap-3 md:grid-cols-2">

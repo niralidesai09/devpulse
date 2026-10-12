@@ -1,5 +1,5 @@
 "use client";
-// "Ask the Pulse": a small chat. Each question is answered by Gemini using
+// "Ask the Pulse": a small chat. Each question is answered by the AI model using
 // ONLY posts Groundswell has stored (found with Postgres full-text search),
 // with numbered links to the real threads. "Not enough data" otherwise.
 
@@ -97,7 +97,7 @@ export function AskPulse() {
             {t.error ? (
               <p className="mt-1 text-sm text-bad">{t.error}</p>
             ) : t.answer === undefined ? (
-              <p className="mt-1 text-sm text-ink-3">Searching stored posts and asking Gemini…</p>
+              <p className="mt-1 text-sm text-ink-3">Searching collected posts…</p>
             ) : (
               <>
                 <div className={`brief mt-1 ${t.enoughData ? "" : "text-ink-2"}`} dangerouslySetInnerHTML={{ __html: markdownToHtml(t.answer) }} />

@@ -24,7 +24,7 @@ export function TopicForm({ topic, submitLabel }: { topic?: TopicValues; submitL
       </div>
       <div className="grid gap-1">
         <label htmlFor={`${prefix}-description`} className="text-xs font-medium text-ink-2">
-          Description <span className="font-normal text-ink-3">(helps Gemini classify posts)</span>
+          Description <span className="font-normal text-ink-3">(helps the AI classify posts)</span>
         </label>
         <input id={`${prefix}-description`} name="description" defaultValue={topic?.description ?? ""} className={input} />
       </div>

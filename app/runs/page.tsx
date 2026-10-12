@@ -2,7 +2,7 @@
 // can see what worked, what failed and why.
 
 import { connection } from "next/server";
-import { getRuns, type RunRow } from "@/lib/db/dashboard";
+import { getRuns, sourceOutcome, type RunRow } from "@/lib/db/dashboard";
 import { fmtDateTime, fmtDuration, SOURCE_LABEL } from "@/lib/format";
 
 const STATUS_STYLE: Record<RunRow["status"], string> = {
@@ -20,7 +20,7 @@ export default async function RunsPage() {
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
       <p className="mt-1 text-sm text-ink-3">
-        Scheduled every Friday 8:00 AM IST, plus manual runs. If a source fails, the run continues and is marked partial.
+        Scheduled every Friday at 8:00 AM IST, plus manual runs. If any source fails, even partly, the run continues and is marked partial.
       </p>
 
       {runs.length === 0 && <p className="mt-6 text-sm text-ink-3">No runs yet.</p>}
@@ -36,7 +36,14 @@ export default async function RunsPage() {
 
 function RunItem({ run }: { run: RunRow }) {
   const s = run.stats;
+  const sourceErrors = Object.entries(run.sources)
+    .filter(([, src]) => src.error)
+    .map(([name, src]) => `${SOURCE_LABEL[name] ?? name}: ${src.error}`);
+  const notes = Object.entries(run.sources).flatMap(([name, src]) => (src.notes ?? []).map((n) => `${SOURCE_LABEL[name] ?? name}: ${n}`));
+  // Runs saved before "partial" existed could say success despite a source error.
+  const displayStatus: RunRow["status"] = run.status === "success" && sourceErrors.length ? "partial" : run.status;
   const issues = [
+    ...sourceErrors,
     ...((s.classifyErrors as string[]) ?? []),
     ...((s.baselineErrors as string[]) ?? []),
     s.briefError ? `Brief: ${s.briefError}` : null,
@@ -52,7 +59,7 @@ function RunItem({ run }: { run: RunRow }) {
           <span className="ml-2 text-xs font-normal text-ink-3">{run.trigger === "cron" ? "scheduled" : "manual"}</span>
         </p>
         <p className="text-sm">
-          <span className={`font-medium ${STATUS_STYLE[run.status]}`}>{run.status}</span>
+          <span className={`font-medium ${STATUS_STYLE[displayStatus]}`}>{displayStatus}</span>
           <span className="text-ink-3"> · {fmtDuration(run.startedAt, run.finishedAt)}</span>
         </p>
       </div>
@@ -66,16 +73,33 @@ function RunItem({ run }: { run: RunRow }) {
 
       {Object.keys(run.sources).length > 0 && (
         <ul className="mt-3 flex flex-wrap gap-1.5" aria-label="Sources">
-          {Object.entries(run.sources).map(([name, src]) => (
-            <li
-              key={name}
-              title={src.error ?? undefined}
-              className={`tabular rounded-md border px-2 py-0.5 text-xs ${src.ok ? "border-line text-ink-2" : "border-bad text-bad"}`}
-            >
-              {src.ok ? "✓" : "✕"} {SOURCE_LABEL[name] ?? name} · {src.count}
-            </li>
-          ))}
+          {Object.entries(run.sources).map(([name, src]) => {
+            const outcome = sourceOutcome(src);
+            const style = outcome === "ok" ? "border-line text-ink-2" : outcome === "partial" ? "border-warn text-warn" : "border-bad text-bad";
+            const icon = outcome === "ok" ? "✓" : outcome === "partial" ? "◐" : "✕";
+            return (
+              <li key={name} title={src.error ?? undefined} className={`tabular rounded-md border px-2 py-0.5 text-xs ${style}`}>
+                {icon} {SOURCE_LABEL[name] ?? name} · {src.count}
+                {outcome !== "ok" && <span className="sr-only"> ({outcome})</span>}
+              </li>
+            );
+          })}
         </ul>
+      )}
+
+      {notes.length > 0 && (
+        <details className="mt-3 text-xs">
+          <summary className="cursor-pointer text-ink-2">
+            {notes.length} coverage {notes.length === 1 ? "note" : "notes"} (search limits reached)
+          </summary>
+          <ul className="mt-2 space-y-1 text-ink-3">
+            {notes.map((n, i) => (
+              <li key={i} className="break-words">
+                {n}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {issues.length > 0 && (

@@ -1,22 +1,22 @@
 // Helpers shared by all adapters: HTTP with timeout + retry,
 // limited concurrency, HTML cleaning and keyword matching.
 
-import type { SourceAdapter, SourceName, SourceResult, SourcePost, TopicInput } from "./types";
+import type { SourceAdapter, SourceName, SourceResult, SourcePost, SourceStatusValue, TopicInput } from "./types";
 
 const TIMEOUT_MS = 10_000; // 10 seconds per request
 const USER_AGENT = "Groundswell/1.0";
 
 /**
- * GET a URL and parse JSON. Gives up after 10s, and retries ONCE on any
+ * GET a URL and parse JSON. Gives up after 10s (or timeoutMs), and retries ONCE on any
  * failure (network error, timeout or non-2xx status) after a short pause.
  */
-export async function fetchJson<T>(url: string, headers: Record<string, string> = {}): Promise<T> {
+export async function fetchJson<T>(url: string, headers: Record<string, string> = {}, timeoutMs = TIMEOUT_MS): Promise<T> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       const res = await fetch(url, {
         headers: { "User-Agent": USER_AGENT, Accept: "application/json", ...headers },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store", // always live data
       });
       if (!res.ok) {
@@ -120,25 +120,37 @@ export function toUnixSeconds(date: Date): number {
 
 /**
  * Wraps an adapter's work: measures time and turns any crash into
- * ok:false, so one broken source never stops the whole run.
- * `work` returns the posts plus any per-request errors it collected.
+ * status "failed", so one broken source never stops the whole run.
+ * `work` returns the posts, any per-request errors, how many requests it
+ * made, and coverage notes (e.g. "a search hit its 100-result cap").
+ *   no errors            -> "ok"
+ *   some requests failed -> "partial"  (data is incomplete, so the run is partial too)
+ *   all requests failed  -> "failed"
  */
 export async function runSafely(
   name: SourceName,
-  work: () => Promise<{ posts: SourcePost[]; errors: string[]; requests: number }>,
+  work: () => Promise<{ posts: SourcePost[]; errors: string[]; requests: number; notes?: string[] }>,
 ): Promise<SourceResult> {
   const start = Date.now();
   try {
-    const { posts, errors, requests } = await work();
-    // If EVERY request failed, the source is down -> ok:false.
-    const allFailed = requests > 0 && errors.length >= requests;
-    const error = errors.length
-      ? `${errors.length}/${requests} requests failed. First error: ${errors[0]}`
-      : null;
-    return { posts, ok: !allFailed, error, durationMs: Date.now() - start };
+    const { posts, errors, requests, notes = [] } = await work();
+    const failedRequests = errors.length;
+    const status: SourceStatusValue =
+      failedRequests === 0 ? "ok" : requests > 0 && failedRequests >= requests ? "failed" : "partial";
+    const error = failedRequests ? `${failedRequests}/${requests} requests failed. First error: ${errors[0]}` : null;
+    return { posts, ok: status === "ok", status, error, notes, requests, failedRequests, durationMs: Date.now() - start };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { posts: [], ok: false, error: `${name}: ${message}`, durationMs: Date.now() - start };
+    return {
+      posts: [],
+      ok: false,
+      status: "failed",
+      error: `${name}: ${message}`,
+      notes: [],
+      requests: 0,
+      failedRequests: 0,
+      durationMs: Date.now() - start,
+    };
   }
 }
 

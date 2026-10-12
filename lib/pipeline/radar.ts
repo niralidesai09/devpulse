@@ -15,7 +15,7 @@
 
 import { z } from "zod";
 import type { ClassifiedPost } from "@/lib/ai/classify";
-import { generateJson } from "@/lib/ai/gemini";
+import { generateJson, UNTRUSTED_CONTENT_RULE, untrusted } from "@/lib/ai/gemini";
 import { createServerClient, type Topic } from "@/lib/db/supabase";
 
 const MIN_POSTS = 3; // fewer unmatched posts than this -> nothing to cluster
@@ -49,7 +49,9 @@ Group them into at most 4 NEW topics worth monitoring every week. Rules:
 - Keywords are used as exact-phrase searches on Hacker News, GitHub Issues, Stack Overflow and DEV.to:
   short, specific phrases developers really type (e.g. "stacked prs", "merge queue", "ci minutes"). Avoid generic words like "code" or "bug".
 - evidence: list the post ids that belong to the topic. Never invent ids.
-- Return an empty list if no group of posts qualifies.`;
+- Return an empty list if no group of posts qualifies.
+
+${UNTRUSTED_CONTENT_RULE}`;
 
 export type RadarResult = { saved: number; considered: number; rejected: string[]; error: string | null };
 
@@ -72,7 +74,7 @@ export async function runEmergingTopicRadar(
   const prompt =
     `Topics Sumit already monitors (do not duplicate):\n${topics.map((t) => `- ${t.name}: ${t.description ?? ""}`).join("\n")}\n\n` +
     `Unmatched posts:\n` +
-    posts.map((p, i) => `p${i + 1} | ${p.source} | "${p.title}" | pain: ${p.classification.painPoint}`).join("\n");
+    posts.map((p, i) => `p${i + 1} | ${p.source} | <post>${untrusted(p.title)}</post> | pain: ${untrusted(p.classification.painPoint)}`).join("\n");
 
   let data: z.infer<typeof RadarSchema>;
   try {
