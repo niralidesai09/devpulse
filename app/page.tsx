@@ -5,7 +5,10 @@
 //   4. The full Friday brief, exactly as emailed
 
 import { connection } from "next/server";
+import { AskPulse } from "@/components/ask-pulse";
+import { CompetitorPanel } from "@/components/competitor-panel";
 import { EmergingRadar } from "@/components/emerging-radar";
+import { ObjectionsPanel } from "@/components/objections-panel";
 import { RunNow } from "@/components/run-now";
 import { ScoreExplainer, type ScoreContext } from "@/components/score-explainer";
 import { TrendChart } from "@/components/trend-chart";
@@ -32,7 +35,7 @@ export default async function HomePage() {
     );
   }
 
-  const { run, topics, brief, totals } = dashboard;
+  const { run, topics, brief, totals, competitors, objections } = dashboard;
   const top = topics[0];
   const riser = fastestRiser(topics);
   const okSources = Object.entries(run.sources).filter(([, s]) => s.ok).length;
@@ -110,7 +113,16 @@ export default async function HomePage() {
       {/* 4. Emerging Topic Radar */}
       <EmergingRadar pending={suggestions.pending} decided={suggestions.decided} unlocked={unlocked} />
 
-      {/* 5. The brief */}
+      {/* 5. Competitor & objection radar */}
+      <section className="mt-10 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2" aria-label="Competitor and objection radar">
+        <CompetitorPanel competitors={competitors} />
+        <ObjectionsPanel objections={objections} />
+      </section>
+
+      {/* 6. Ask the Pulse */}
+      <AskPulse />
+
+      {/* 7. The brief */}
       <section className="mt-10 rounded-xl border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-6">
           <h2 className="text-sm font-semibold">This week&apos;s brief</h2>

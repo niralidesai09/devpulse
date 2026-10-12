@@ -325,8 +325,15 @@ function render(d: BriefData, g: BriefJson, linker: ReturnType<typeof makeLinker
   return out.join("\n\n");
 }
 
+export type Objection = {
+  objection: string;
+  response: string;
+  evidence: { url: string; title: string; source: string }[];
+};
+
 export type WrittenBrief = {
   markdown: string;
+  objections: Objection[]; // also stored as structured data for the dashboard
   checks: { evidenceLinks: number; unknownRefs: number; unverifiedNumbers: string[] };
 };
 
@@ -348,8 +355,21 @@ export async function writeBrief(runId: string): Promise<WrittenBrief> {
   const geminiText = [json.tldr, json.rising_falling, json.unresolved, json.emerging, json.competitor_commentary,
     json.objections.map((o) => `${o.objection} ${o.response}`), json.sprint.map((s) => `${s.title} ${s.why}`)].flat().join(" ");
 
+  // Same objections as section 7, as data: real evidence threads only.
+  const byRef = new Map(data.evidence.map((e) => [e.ref, e]));
+  const plain = (text: string) => text.replace(/\s*\[((?:E\d+\s*,?\s*)+)\]/g, "").replace(/https?:\/\/\S+/g, "").trim();
+  const objections: Objection[] = json.objections.map((o) => ({
+    objection: plain(o.objection),
+    response: plain(o.response),
+    evidence: o.evidence
+      .map((r) => byRef.get(r.trim()))
+      .filter((e): e is Evidence => Boolean(e))
+      .map((e) => ({ url: e.url, title: e.title, source: e.source })),
+  }));
+
   return {
     markdown,
+    objections,
     checks: {
       evidenceLinks: linker.used.size,
       unknownRefs: linker.unknownRefs(),
@@ -364,7 +384,15 @@ export async function createBrief(runId: string): Promise<{ id: string } & Writt
   const { data, error } = await createServerClient()
     .from("briefs")
     .upsert(
-      { run_id: runId, markdown: brief.markdown, model: getModel(), checks: brief.checks, emailed_at: null, email_error: null },
+      {
+        run_id: runId,
+        markdown: brief.markdown,
+        objections: brief.objections,
+        model: getModel(),
+        checks: brief.checks,
+        emailed_at: null,
+        email_error: null,
+      },
       { onConflict: "run_id" },
     )
     .select("id")

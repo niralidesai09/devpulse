@@ -24,6 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </Link>
             <nav className="-mx-2 flex gap-1 text-sm" aria-label="Main">
               <NavLink href="/">Brief</NavLink>
+              <NavLink href="/#ask">Ask</NavLink>
               <NavLink href="/topics">Topics</NavLink>
               <NavLink href="/runs">Runs</NavLink>
             </nav>

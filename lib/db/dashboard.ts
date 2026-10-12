@@ -47,9 +47,21 @@ export type TopicCard = {
   evidence: EvidenceLink[]; // top 3 threads that best justify the score
 };
 
+export type CompetitorRow = {
+  tool: string;
+  mentions: number;
+  avgSentiment: number; // -1 .. 1
+  negative: number; // posts with sentiment < -0.2
+  threads: { title: string; url: string; source: string }[]; // most-discussed first
+};
+
+export type ObjectionRow = { objection: string; response: string; evidence: { url: string; title: string; source: string }[] };
+
 export type Dashboard = {
   run: RunRow;
   topics: TopicCard[]; // ranked by Opportunity Score
+  competitors: CompetitorRow[]; // most-mentioned first
+  objections: ObjectionRow[];
   brief: { markdown: string; emailedAt: string | null; emailError: string | null; model: string | null } | null;
   totals: { collected: number; kept: number; unresolved: number };
 };
@@ -87,10 +99,10 @@ export async function getDashboard(): Promise<Dashboard | null> {
     supabase.from("topic_stats").select("*").eq("run_id", run.id).order("opportunity_score", { ascending: false }),
     supabase
       .from("posts")
-      .select("topic_id, title, url, source, pain_point, is_unresolved, unresolved_reason, severity, score, comment_count")
+      .select("topic_id, title, url, source, pain_point, is_unresolved, unresolved_reason, severity, sentiment, competitors, score, comment_count")
       .eq("run_id", run.id),
     supabase.from("topics").select("id, name"),
-    supabase.from("briefs").select("markdown, emailed_at, email_error, model").eq("run_id", run.id).maybeSingle(),
+    supabase.from("briefs").select("markdown, emailed_at, email_error, model, objections").eq("run_id", run.id).maybeSingle(),
   ]);
 
   const nameById = new Map((topics ?? []).map((t) => [t.id as string, t.name as string]));
@@ -145,10 +157,28 @@ export async function getDashboard(): Promise<Dashboard | null> {
     };
   });
 
+  // Competitor radar: every tool Gemini found in this run's posts.
+  const byTool = new Map<string, PostRow[]>();
+  for (const p of allPosts) for (const tool of (p.competitors ?? []) as string[]) byTool.set(tool, [...(byTool.get(tool) ?? []), p]);
+  const competitors: CompetitorRow[] = [...byTool.entries()]
+    .map(([tool, list]) => ({
+      tool,
+      mentions: list.length,
+      avgSentiment: Math.round((list.reduce((sum, p) => sum + Number(p.sentiment ?? 0), 0) / list.length) * 100) / 100,
+      negative: list.filter((p) => Number(p.sentiment ?? 0) < -0.2).length,
+      threads: [...list]
+        .sort((a, b) => engagement(b) - engagement(a))
+        .slice(0, 3)
+        .map((p) => ({ title: p.title, url: p.url, source: p.source })),
+    }))
+    .sort((a, b) => b.mentions - a.mentions || a.tool.localeCompare(b.tool));
+
   const runRow = toRunRow(run);
   return {
     run: runRow,
     topics: cards,
+    competitors,
+    objections: ((brief?.objections ?? []) as ObjectionRow[]).filter((o) => o.objection),
     brief: brief
       ? { markdown: brief.markdown, emailedAt: brief.emailed_at, emailError: brief.email_error, model: brief.model }
       : null,
