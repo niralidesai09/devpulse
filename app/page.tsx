@@ -6,6 +6,7 @@
 
 import { connection } from "next/server";
 import { RunNow } from "@/components/run-now";
+import { ScoreExplainer, type ScoreContext } from "@/components/score-explainer";
 import { TrendChart } from "@/components/trend-chart";
 import { isAdmin } from "@/lib/admin";
 import { getDashboard, type TopicCard } from "@/lib/db/dashboard";
@@ -35,6 +36,15 @@ export default async function HomePage() {
   const riser = fastestRiser(topics);
   const okSources = Object.entries(run.sources).filter(([, s]) => s.ok).length;
   const unresolvedPct = totals.kept ? Math.round((totals.unresolved / totals.kept) * 100) : 0;
+
+  // Shared numbers the "Why this score?" panels compare against.
+  const mostDiscussed = [...topics].sort((a, b) => b.mentions - a.mentions)[0];
+  const scoreCtx: ScoreContext = {
+    maxMentions: mostDiscussed?.mentions ?? 0,
+    mostDiscussed: mostDiscussed?.name ?? "",
+    maxRaw: Math.max(0, ...topics.map((t) => t.components.raw)),
+    topTopic: top?.name ?? "",
+  };
 
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
@@ -78,7 +88,7 @@ export default async function HomePage() {
           </p>
           <ol className="mt-3 space-y-3">
             {topics.map((t, i) => (
-              <TopicRow key={t.topicId} topic={t} rank={i + 1} />
+              <TopicRow key={t.topicId} topic={t} rank={i + 1} ctx={scoreCtx} />
             ))}
           </ol>
         </div>
@@ -135,7 +145,7 @@ function Kpi({ label, value, note, small }: { label: string; value: string; note
   );
 }
 
-function TopicRow({ topic: t, rank }: { topic: TopicCard; rank: number }) {
+function TopicRow({ topic: t, rank, ctx }: { topic: TopicCard; rank: number; ctx: ScoreContext }) {
   return (
     <li className="rounded-xl border border-line bg-surface p-4">
       <div className="flex items-start gap-3">
@@ -158,18 +168,27 @@ function TopicRow({ topic: t, rank }: { topic: TopicCard; rank: number }) {
             <Stat label="Unresolved" value={`${t.unresolvedPct}%`} />
             <Stat label="Severity" value={t.avgSeverity === null ? "–" : `${t.avgSeverity.toFixed(1)}/5`} />
           </dl>
+          {t.mentions > 0 && <ScoreExplainer topic={t} ctx={ctx} />}
           {t.evidence.length > 0 && (
-            <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
-              {t.evidence.map((e) => (
-                <li key={e.url} className="min-w-0">
-                  <a href={e.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                    {e.title}
-                  </a>
-                  <span className="text-xs text-ink-3"> · {SOURCE_LABEL[e.source] ?? e.source}</span>
-                  {e.painPoint && <p className="text-xs text-ink-2">{e.painPoint}</p>}
-                </li>
-              ))}
-            </ul>
+            <div className="mt-3 border-t border-line pt-3">
+              <h4 className="text-xs font-medium text-ink-3">Top evidence</h4>
+              <ul className="mt-1.5 space-y-2 text-sm">
+                {t.evidence.map((e) => (
+                  <li key={e.url} className="min-w-0">
+                    <a href={e.url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      {e.title}
+                    </a>
+                    <span className="text-xs text-ink-3"> · {SOURCE_LABEL[e.source] ?? e.source}</span>
+                    {e.painPoint && <p className="text-xs text-ink-2">{e.painPoint}</p>}
+                    <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-ink-3">
+                      <span className={e.isUnresolved ? "text-warn" : "text-good"}>{e.isUnresolved ? "Unresolved" : "Resolved"}</span>
+                      {e.severity !== null && <span>Severity {e.severity}/5</span>}
+                      {e.unresolvedReason && <span className="min-w-0">{e.unresolvedReason}</span>}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
       </div>

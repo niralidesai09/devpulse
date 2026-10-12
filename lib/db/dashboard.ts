@@ -19,13 +19,22 @@ export type RunRow = {
   error: string | null;
 };
 
-export type EvidenceLink = { title: string; url: string; source: string; painPoint: string | null; isUnresolved: boolean };
+export type EvidenceLink = {
+  title: string;
+  url: string;
+  source: string;
+  painPoint: string | null;
+  isUnresolved: boolean;
+  unresolvedReason: string | null;
+  severity: number | null;
+};
 
 export type TopicCard = {
   topicId: string;
   name: string;
   opportunityScore: number;
   mentions: number;
+  unresolvedCount: number;
   unresolvedPct: number;
   avgSeverity: number | null;
   avgSentiment: number | null;
@@ -34,8 +43,8 @@ export type TopicCard = {
   trendLabel: string; // "▲ 25%", "new", ...
   keywordsThisWeek: number | null;
   keywordsLastWeek: number | null;
-  components: { frequency: number; growth: number; unresolved: number; severity: number };
-  evidence: EvidenceLink[]; // top 3 by engagement
+  components: { frequency: number; growth: number; unresolved: number; severity: number; raw: number };
+  evidence: EvidenceLink[]; // top 3 threads that best justify the score
 };
 
 export type Dashboard = {
@@ -78,7 +87,7 @@ export async function getDashboard(): Promise<Dashboard | null> {
     supabase.from("topic_stats").select("*").eq("run_id", run.id).order("opportunity_score", { ascending: false }),
     supabase
       .from("posts")
-      .select("topic_id, title, url, source, pain_point, is_unresolved, score, comment_count")
+      .select("topic_id, title, url, source, pain_point, is_unresolved, unresolved_reason, severity, score, comment_count")
       .eq("run_id", run.id),
     supabase.from("topics").select("id, name"),
     supabase.from("briefs").select("markdown, emailed_at, email_error, model").eq("run_id", run.id).maybeSingle(),
@@ -88,6 +97,14 @@ export async function getDashboard(): Promise<Dashboard | null> {
   const engagement = (p: { score: number | null; comment_count: number | null }) => (p.score ?? 0) + (p.comment_count ?? 0);
   const allPosts = posts ?? [];
 
+  // Evidence = the threads that best justify an "opportunity":
+  // unresolved first, then most severe, then most discussed.
+  type PostRow = (typeof allPosts)[number];
+  const byJustification = (a: PostRow, b: PostRow) =>
+    Number(b.is_unresolved) - Number(a.is_unresolved) ||
+    (b.severity ?? 0) - (a.severity ?? 0) ||
+    engagement(b) - engagement(a);
+
   const cards: TopicCard[] = (stats ?? []).map((s) => {
     const trend = s.trend as Trend;
     const changePct = num(s.change_pct);
@@ -96,6 +113,7 @@ export async function getDashboard(): Promise<Dashboard | null> {
       name: nameById.get(s.topic_id) ?? "Deleted topic",
       opportunityScore: Number(s.opportunity_score ?? 0),
       mentions: s.mention_count,
+      unresolvedCount: s.unresolved_count,
       unresolvedPct: s.mention_count ? Math.round((s.unresolved_count / s.mention_count) * 100) : 0,
       avgSeverity: num(s.avg_severity),
       avgSentiment: num(s.avg_sentiment),
@@ -109,12 +127,21 @@ export async function getDashboard(): Promise<Dashboard | null> {
         growth: Number(s.score_growth ?? 1),
         unresolved: Number(s.score_unresolved ?? 0),
         severity: Number(s.score_severity ?? 0),
+        raw: Number(s.score_raw ?? 0),
       },
       evidence: allPosts
         .filter((p) => p.topic_id === s.topic_id)
-        .sort((a, b) => engagement(b) - engagement(a))
+        .sort(byJustification)
         .slice(0, 3)
-        .map((p) => ({ title: p.title, url: p.url, source: p.source, painPoint: p.pain_point, isUnresolved: Boolean(p.is_unresolved) })),
+        .map((p) => ({
+          title: p.title,
+          url: p.url,
+          source: p.source,
+          painPoint: p.pain_point,
+          isUnresolved: Boolean(p.is_unresolved),
+          unresolvedReason: p.unresolved_reason,
+          severity: p.severity,
+        })),
     };
   });
 

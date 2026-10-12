@@ -95,23 +95,22 @@ export function computeTopicStats(
   });
 
   // Second pass: Opportunity Score components (need the max across topics).
+  // Each component is rounded to 4 decimals FIRST and the product is made
+  // from those exact numbers, so the "Why this score?" maths shown in the
+  // UI always multiplies out to the stored result.
   const maxMentions = Math.max(0, ...rows.map((r) => r.mentionCount));
   const scored = rows.map((r) => {
-    const scoreFrequency = maxMentions ? r.mentionCount / maxMentions : 0;
-    const scoreUnresolved = r.mentionCount ? r.unresolvedCount / r.mentionCount : 0;
-    const scoreSeverity = r.avgSeverity ? r.avgSeverity / 5 : 0;
-    const scoreRaw = scoreFrequency * r.scoreGrowth * scoreUnresolved * scoreSeverity;
-    return { ...r, scoreFrequency, scoreUnresolved, scoreSeverity, scoreRaw };
+    const scoreFrequency = round(maxMentions ? r.mentionCount / maxMentions : 0, 4);
+    const scoreGrowth = round(r.scoreGrowth, 4);
+    const scoreUnresolved = round(r.mentionCount ? r.unresolvedCount / r.mentionCount : 0, 4);
+    const scoreSeverity = round(r.avgSeverity ? r.avgSeverity / 5 : 0, 4);
+    const scoreRaw = round(scoreFrequency * scoreGrowth * scoreUnresolved * scoreSeverity, 4);
+    return { ...r, scoreFrequency, scoreGrowth, scoreUnresolved, scoreSeverity, scoreRaw };
   });
 
   const maxRaw = Math.max(0, ...scored.map((r) => r.scoreRaw));
   return scored.map((r) => ({
     ...r,
-    scoreFrequency: round(r.scoreFrequency, 3),
-    scoreGrowth: round(r.scoreGrowth, 3),
-    scoreUnresolved: round(r.scoreUnresolved, 3),
-    scoreSeverity: round(r.scoreSeverity, 3),
-    scoreRaw: round(r.scoreRaw, 4),
     opportunityScore: maxRaw ? Math.round((r.scoreRaw / maxRaw) * 100) : 0,
   }));
 }
