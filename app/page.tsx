@@ -80,7 +80,7 @@ export default async function HomePage() {
       </section>
 
       {/* 3. Ranked topics + chart */}
-      <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <section className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div>
           <h2 className="text-sm font-semibold">Topics ranked by opportunity</h2>
           <p className="mt-0.5 text-xs text-ink-3">

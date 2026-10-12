@@ -187,4 +187,12 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - Vercel (CLI, account `nirali-desai-3979`; the Vercel MCP is logged into a different account): project `devpulse` (prj_I3JkGmWb5wRTwt46nvd6Sg75u9s1), Git-connected to niralidesai09/devpulse, **production branch = `roadmap`** (set via `PATCH /v9/projects/devpulse/branch`, user-approved), Vercel Authentication limited to **preview** so production is public. 10 production env vars copied from .env.local via stdin (values never printed; anon key as `--type config`).
 - Hobby plan blocks deployments whose commit author isn't linked to the account → commits must use `331916117+niralidesai09@users.noreply.github.com` (set per-commit with GIT_AUTHOR_EMAIL/GIT_COMMITTER_EMAIL; no shared git config changed).
 
-**Next:** Step 8 (not started).
+- Live: **https://devpulse-sable-seven.vercel.app** (production run 2026-10-12: 84s, 256 collected, 59 kept, email sent). Cron registered (`vercel crons ls`: /api/cron/weekly 30 2 * * 5). All protected endpoints 401 without secret/cookie. The other session's 2 v2 topics are now in `topics`, so runs monitor 8 topics.
+
+### Step 8 — Opportunity Score explainer ✅ (2026-10-12)
+- `components/score-explainer.tsx` (server component, `<details>` "Why this score?" on every topic card with mentions): 4 factors with value, bar and plain-English inputs — frequency ("12 posts vs 14 for the most-discussed topic X"), growth on a ×0.5–×2 track filled from the ×1 mark ("(2 + 3) ÷ (0 + 3)"), unresolved ("10 of 12 posts…"), severity ("average 3.2 of 5" + scale); strongest / weakest factor sentence; the exact maths (`a × b × c × d = raw`, `raw ÷ max raw × 100 = score`). All text built by code from stored numbers — no AI.
+- Evidence ("Top evidence", top 3 per topic) now ranked by what justifies the score: unresolved first, then severity, then engagement; shows Resolved/Unresolved, severity and the unresolved reason.
+- `scoring.ts`: components rounded to 4 dp BEFORE multiplying (was 3 dp after), so the shown maths always multiplies out. Verified: unit check + all 8 live formulas recomputed from the production HTML → product and score match.
+- Mobile fix: grid gets `grid-cols-[minmax(0,1fr)]` below lg (an open panel made the page 409px wide at 375px; now 375px with all panels open).
+
+**Next:** Step 9 (not started).
