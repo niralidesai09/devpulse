@@ -60,7 +60,7 @@ export function RunNow({ unlocked }: { unlocked: boolean }) {
           type="button"
           onClick={start}
           disabled={running}
-          className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-white hover:opacity-90 disabled:opacity-70 dark:text-[#0d1726]"
+          className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink hover:opacity-90 disabled:opacity-70"
         >
           {running ? `Running… ${seconds}s` : "Run now"}
         </button>

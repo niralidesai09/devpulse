@@ -85,7 +85,7 @@ export function ScoreExplainer({ topic: t, ctx }: { topic: TopicCard; ctx: Score
   const weakest = sorted[sorted.length - 1];
 
   return (
-    <details className="group mt-3 rounded-lg border border-line bg-bg/60">
+    <details className="group mt-4 rounded-md border border-line bg-bg/60">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-medium text-ink-2 hover:text-ink">
         <span>Why this score?</span>
         <span aria-hidden className="text-ink-3 transition-transform group-open:rotate-90">›</span>

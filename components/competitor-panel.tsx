@@ -8,9 +8,9 @@ const label = (s: number) => (s <= -0.2 ? "negative" : s >= 0.2 ? "positive" : "
 
 export function CompetitorPanel({ competitors }: { competitors: CompetitorRow[] }) {
   return (
-    <div className="rounded-xl border border-line bg-surface p-4">
-      <h2 className="text-sm font-semibold">Competitor radar</h2>
-      <p className="mt-0.5 text-xs text-ink-3">Tools named in this week&apos;s relevant posts · sentiment −1 (negative) to +1 (positive)</p>
+    <div className="rounded-md border border-line bg-surface p-4">
+      <h2 className="text-[15px] font-semibold">Competitor radar</h2>
+      <p className="mt-0.5 text-[13px] text-ink-3">Tools named in this week&apos;s relevant discussions. Sentiment is AI-assessed, from −1 (negative) to +1 (positive).</p>
 
       {competitors.length === 0 ? (
         <p className="mt-4 text-sm text-ink-3">No competitor tools were named this week.</p>

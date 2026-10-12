@@ -114,9 +114,10 @@ describe("6 + 7. week-on-week maths and zero baselines", () => {
   });
 
   it("labels always carry the counts and never claim a direction from tiny numbers", () => {
-    expect(formatTrend("low_data", null, 2, 0)).toBe("0 → 2 (too few to compare)");
-    expect(formatTrend("up", 73, 19, 11)).toBe("11 → 19 (▲ 73%)");
-    expect(formatTrend("new", null, 6, 0)).toBe("0 → 6 (new in HN data)");
+    expect(formatTrend("low_data", null, 2, 0)).toBe("0 → 2 · too few to compare");
+    expect(formatTrend("up", 73, 19, 11)).toBe("11 → 19 · rising 73%");
+    expect(formatTrend("down", -42, 11, 19)).toBe("19 → 11 · falling 42%");
+    expect(formatTrend("new", null, 6, 0)).toBe("0 → 6 · new in HN data");
   });
 
   it("uses a comparable previous run (all sources) before the HN-only signal", () => {
@@ -125,7 +126,7 @@ describe("6 + 7. week-on-week maths and zero baselines", () => {
     const a = computeTopicStats(topics, posts, { A: hn(9, 20) }, prev).find((s) => s.topicId === "A")!;
     expect(a.trendDetail.growthBasis).toBe("previous_run");
     expect(a.scoreGrowth).toBe(1.8); // (6 + 3) / (2 + 3)
-    expect(formatRunComparison(6, a.trendDetail)).toBe("2 → 6 (▲ 200%)");
+    expect(formatRunComparison(6, a.trendDetail)).toBe("2 → 6 · rising 200%");
 
     const notComparable = computeTopicStats(topics, posts, { A: hn(9, 20) }, { ...prev, comparable: false, reason: "a source was incomplete" });
     expect(notComparable[0].trendDetail.growthBasis).toBe("hn_keywords");

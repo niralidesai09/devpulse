@@ -3,21 +3,26 @@
 // exam's hard rules are met. Static page: no database reads.
 
 import type { Metadata } from "next";
+import { PageHeader } from "@/components/ui";
 import { COMPONENT_GROUPS } from "@/lib/components-map";
 
 export const metadata: Metadata = { title: "Architecture · Groundswell" };
 
 export default function ArchitecturePage() {
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">How Groundswell works</h1>
-      <p className="mt-1 max-w-3xl text-sm text-ink-2">
-        Every Friday at 8:00 AM IST, Groundswell collects the last 7 days of developer discussions from four public communities,
-        has Google Gemini Flash classify them, computes trends and an Opportunity Score in code, and emails Sumit an evidence-linked
-        brief before his engineering sync.
-      </p>
+    <main className="mx-auto max-w-[1200px] px-5 py-6 lg:px-10 lg:py-8">
+      <PageHeader
+        title="How Groundswell works"
+        description={
+          <p>
+            Every Friday at 8:00 AM IST, Groundswell collects the last 7 days of developer discussions from four public communities (Hacker News,
+            GitHub Issues, Stack Overflow and DEV.to; no other sites), has Google Gemini Flash classify them, computes trends and a relative
+            Opportunity Score in code, and emails an evidence-linked brief before the engineering sync.
+          </p>
+        }
+      />
 
-      <figure className="mt-6 rounded-xl border border-line bg-surface p-3 sm:p-4">
+      <figure className="mt-6 rounded-md border border-line bg-surface p-3 sm:p-4">
         <div className="overflow-x-auto">
           <Diagram />
         </div>
@@ -59,10 +64,10 @@ export default function ArchitecturePage() {
         <div className="mt-3 space-y-6">
           {COMPONENT_GROUPS.map((group) => (
             <div key={group.title}>
-              <h3 className="text-xs font-medium tracking-wide text-ink-3 uppercase">{group.title}</h3>
+              <h3 className="text-[13px] font-semibold text-ink">{group.title}</h3>
               <ul className="mt-2 grid grid-cols-[minmax(0,1fr)] gap-2 md:grid-cols-2">
                 {group.items.map((c) => (
-                  <li key={c.name} className="rounded-lg border border-line bg-surface p-3">
+                  <li key={c.name} className="rounded-md border border-line bg-surface p-3">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                       <p className="text-sm font-medium">{c.name}</p>
                       <p className="text-xs text-accent">{c.service}</p>
@@ -84,7 +89,7 @@ export default function ArchitecturePage() {
 
 function Rule({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <li className="rounded-lg border border-line bg-surface p-3">
+    <li className="rounded-md border border-line bg-surface p-3">
       <p className="font-medium text-ink">✓ {title}</p>
       <p className="mt-0.5">{children}</p>
     </li>

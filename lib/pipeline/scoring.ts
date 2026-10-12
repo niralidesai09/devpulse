@@ -177,23 +177,37 @@ export function computeTopicStats(
 }
 
 /**
+ * The lifecycle vocabulary used everywhere (one fixed scale):
+ * new · rising · steady · falling · too few to compare · no data.
+ */
+export const LIFECYCLE_LABEL: Record<Trend, string> = {
+  new: "new",
+  up: "rising",
+  flat: "steady",
+  down: "falling",
+  low_data: "too few to compare",
+  no_data: "no data",
+};
+
+/**
  * HN keyword trend as text, always with the counts so it can't be mistaken
- * for the all-source mention count, e.g. "11 → 19 (▲ 73%)", "0 → 6 (new)",
- * "2 → 0 (too few to compare)".
+ * for the all-source mention count, e.g. "11 → 19 · rising 73%",
+ * "0 → 6 · new in HN data", "2 → 0 · too few to compare".
  */
 export function formatTrend(trend: Trend, changePct: number | null, thisWeek?: number | null, lastWeek?: number | null): string {
-  const counts = thisWeek !== null && thisWeek !== undefined && lastWeek !== null && lastWeek !== undefined ? `${lastWeek} → ${thisWeek} ` : "";
+  const counts = thisWeek !== null && thisWeek !== undefined && lastWeek !== null && lastWeek !== undefined ? `${lastWeek} → ${thisWeek} · ` : "";
+  const size = changePct === null ? "" : ` ${Math.abs(changePct)}%`;
   switch (trend) {
     case "no_data":
       return "no data";
     case "low_data":
-      return `${counts}(too few to compare)`.trim();
+      return `${counts}too few to compare`;
     case "new":
-      return `${counts}(new in HN data)`.trim();
+      return `${counts}new in HN data`;
     case "flat":
-      return `${counts}(→ ${changePct !== null && changePct > 0 ? "+" : ""}${changePct ?? 0}%)`.trim();
+      return `${counts}steady${size}`;
     default:
-      return `${counts}(${(changePct ?? 0) > 0 ? "▲" : "▼"} ${Math.abs(changePct ?? 0)}%)`.trim();
+      return `${counts}${LIFECYCLE_LABEL[trend]}${size}`;
   }
 }
 

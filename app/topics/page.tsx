@@ -5,6 +5,7 @@
 import { connection } from "next/server";
 import { lockAction, setTopicActiveAction } from "@/app/actions";
 import { TopicForm } from "@/components/topic-form";
+import { PageHeader } from "@/components/ui";
 import { UnlockForm } from "@/components/unlock-form";
 import { isAdmin } from "@/lib/admin";
 import { createServerClient, type Topic } from "@/lib/db/supabase";
@@ -19,29 +20,32 @@ export default async function TopicsPage() {
   const activeCount = topics.filter((t) => t.is_active).length;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Monitored topics</h1>
-          <p className="mt-1 text-sm text-ink-3">
-            {activeCount} active of {topics.length} · keywords are searched on every source each week
+    <main className="mx-auto max-w-[900px] px-5 py-6 lg:px-10 lg:py-8">
+      <PageHeader
+        title="Topics"
+        description={
+          <p>
+            What Groundswell monitors: {activeCount} active of {topics.length}. Each keyword is an exact phrase searched on Hacker News, GitHub
+            Issues, Stack Overflow and DEV.to every week. Changes apply from the next run.
           </p>
-        </div>
-        {unlocked ? (
-          <form action={lockAction}>
-            <button type="submit" className="text-xs text-ink-3 hover:text-ink">
-              Lock editing
-            </button>
-          </form>
-        ) : (
-          <UnlockForm label="Unlock editing" />
-        )}
-      </div>
+        }
+        actions={
+          unlocked ? (
+            <form action={lockAction}>
+              <button type="submit" className="h-9 rounded-md px-2 text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink">
+                Lock editing
+              </button>
+            </form>
+          ) : (
+            <UnlockForm label="Unlock editing" />
+          )
+        }
+      />
 
       {error && <p className="mt-4 text-sm text-bad">Could not load topics: {error.message}</p>}
 
       {unlocked && (
-        <details className="mt-6 rounded-xl border border-dashed border-line bg-surface p-4">
+        <details className="mt-6 rounded-md border border-dashed border-line bg-surface p-4">
           <summary className="cursor-pointer text-sm font-medium">+ Add a topic</summary>
           <div className="mt-4">
             <TopicForm submitLabel="Add topic" />
@@ -51,14 +55,14 @@ export default async function TopicsPage() {
 
       <ul className="mt-6 space-y-3">
         {topics.map((topic) => (
-          <li key={topic.id} className={`rounded-xl border border-line bg-surface p-4 ${topic.is_active ? "" : "opacity-70"}`}>
+          <li key={topic.id} className={`rounded-md border border-line bg-surface p-4 ${topic.is_active ? "" : "opacity-70"}`}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="font-medium">{topic.name}</h2>
                 {topic.description && <p className="mt-0.5 text-sm text-ink-2">{topic.description}</p>}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className={`rounded-full px-2 py-0.5 text-xs ${topic.is_active ? "bg-accent-soft text-accent" : "bg-surface-2 text-ink-3"}`}>
+                <span className={`rounded-sm px-2 py-0.5 text-xs ${topic.is_active ? "bg-accent-soft text-accent" : "bg-surface-2 text-ink-3"}`}>
                   {topic.is_active ? "Active" : "Paused"}
                 </span>
                 {unlocked && (

@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "arial",
+        "createdAt": "2026-10-11T13:37:46.996Z",
+        "reason": "Claude: HTML email template (lib/email/brief-email.ts) — email clients don't reliably load web fonts, so a system/Arial fallback stack is the domain-appropriate choice"
+      }
+    ]
+  }
+}

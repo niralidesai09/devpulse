@@ -14,7 +14,7 @@ export function SuggestionButtons({ id }: { id: string }) {
         name="decision"
         value="approve"
         disabled={pending}
-        className="h-8 rounded-md bg-accent px-3 text-xs font-medium text-white disabled:opacity-60 dark:text-[#0d1726]"
+        className="h-8 rounded-md bg-accent px-3 text-xs font-medium text-accent-ink disabled:opacity-60"
       >
         Approve &amp; monitor
       </button>

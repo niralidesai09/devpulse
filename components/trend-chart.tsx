@@ -12,7 +12,7 @@ const SERIES = [
   { key: "lastWeek", name: "Last week", color: "var(--series-2)" },
 ] as const;
 
-const shorten = (name: string, max = 22) => (name.length > max ? name.slice(0, max - 1).trimEnd() + "…" : name);
+import { wrapWords } from "@/lib/format";
 
 // Left-hand label, two lines: topic name, then "last → this week (change)".
 // This puts the actual numbers next to every pair of bars.
@@ -30,13 +30,18 @@ function TopicTick({
 }) {
   const d = payload ? byTopic.get(payload.value) : undefined;
   if (!d) return null;
+  const lines = wrapWords(d.topic, 24);
+  const x0 = Number(x) - 8;
+  // Centre the block (name lines + state line) on the bar pair.
+  const startDy = -((lines.length + 1) * 14) / 2 + 10;
   return (
-    <text x={Number(x) - 6} y={Number(y)} textAnchor="end" fontSize={12}>
-      <title>{d.topic}</title>
-      <tspan x={Number(x) - 6} dy={-3} fill="var(--ink)">
-        {shorten(d.topic)}
-      </tspan>
-      <tspan x={Number(x) - 6} dy={15} fill="var(--ink-3)" fontSize={11} className="tabular">
+    <text x={x0} y={Number(y)} textAnchor="end" fontSize={12}>
+      {lines.map((line, i) => (
+        <tspan key={i} x={x0} dy={i === 0 ? startDy : 14} fill="var(--ink)">
+          {line}
+        </tspan>
+      ))}
+      <tspan x={x0} dy={15} fill="var(--ink-3)" fontSize={11} className="tabular">
         {d.trendLabel}
       </tspan>
     </text>
@@ -59,11 +64,11 @@ export function TrendChart({ data }: { data: TrendDatum[] }) {
         ))}
       </div>
 
-      <div style={{ height: 40 + data.length * 52 }} role="img" aria-label="Keyword matches this week versus last week, per topic">
+      <div style={{ height: 40 + data.length * 66 }} role="img" aria-label="Keyword matches this week versus last week, per topic">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, bottom: 0, left: 0 }} barGap={2} barCategoryGap="30%">
             <XAxis type="number" hide allowDecimals={false} />
-            <YAxis type="category" dataKey="topic" width={158} tickLine={false} axisLine={false} interval={0} tick={<TopicTick byTopic={byTopic} />} />
+            <YAxis type="category" dataKey="topic" width={200} tickLine={false} axisLine={false} interval={0} tick={<TopicTick byTopic={byTopic} />} />
             <Tooltip
               cursor={{ fill: "var(--surface-2)" }}
               contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 8, fontSize: 12 }}
@@ -72,7 +77,7 @@ export function TrendChart({ data }: { data: TrendDatum[] }) {
               formatter={(value, name) => [`${value} matches`, name]}
             />
             {SERIES.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[0, 4, 4, 0]} maxBarSize={14} />
+              <Bar key={s.key} dataKey={s.key} name={s.name} fill={s.color} radius={[0, 4, 4, 0]} maxBarSize={14} isAnimationActive={false} />
             ))}
           </BarChart>
         </ResponsiveContainer>

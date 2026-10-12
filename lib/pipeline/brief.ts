@@ -44,7 +44,7 @@ export type Evidence = {
 type TopicRow = {
   topic: string;
   mentionsAllSources: number; // relevant posts this week, all four sources
-  hnKeywordTrend: string; // "11 → 19 (▲ 73%)", "2 → 0 (too few to compare)" (Hacker News only)
+  hnKeywordTrend: string; // "11 → 19 · rising 73%", "2 → 0 · too few to compare" (Hacker News only)
   vsPreviousRun: string; // mentions vs the previous weekly run, or why not comparable
   keywordMatchesThisWeek: number | null;
   keywordMatchesLastWeek: number | null;
@@ -176,6 +176,17 @@ const BriefSchema = z.object({
   sprint: z
     .array(z.object({ title: z.string(), why: z.string(), evidence: evidenceIds }))
     .length(3),
+  opportunities: z
+    .array(
+      z.object({
+        topic: z.string().describe("Exact topic name from STATS.topics"),
+        struggle: z.string().describe("One sentence, observed: what developers in the cited threads struggle with"),
+        why_it_matters: z.string().describe("One sentence, a SUGGESTION: why this could matter to a code review automation product builder"),
+        evidence: evidenceIds,
+      }),
+    )
+    .max(5)
+    .describe("One entry for each of the top 5 topics by opportunityScore that has evidence; fewer if a topic has no relevant evidence"),
 });
 type BriefJson = z.infer<typeof BriefSchema>;
 
@@ -200,6 +211,7 @@ STRICT RULES:
   You do NOT know what Sumit's product can do, so never claim it has a feature. Write the suggested response as an honest talking point:
   acknowledge the concern, then say what to show, measure or offer in a demo (e.g. "show the false-positive rate on their own repository").
 - Sprint items are RECOMMENDATIONS, not observed facts: 3 actionable product or engineering items, each tied to evidence.
+- Opportunities: for each of the top 5 topics, "struggle" states only what the cited threads show; "why_it_matters" is your suggestion and must not be phrased as market fact.
 
 ${UNTRUSTED_CONTENT_RULE}`;
 
@@ -376,9 +388,15 @@ export type Objection = {
   evidence: { url: string; title: string; source: string }[];
 };
 
+export type EvidenceRef = { url: string; title: string; source: string };
+export type OpportunityNote = { topic: string; struggle: string; whyItMatters: string; evidence: EvidenceRef[] };
+export type Recommendation = { title: string; why: string; evidence: EvidenceRef[] };
+
 export type WrittenBrief = {
   markdown: string;
   objections: Objection[]; // also stored as structured data for the dashboard
+  opportunities: OpportunityNote[]; // AI notes per top topic (labelled as suggestions in the UI)
+  recommendations: Recommendation[]; // the 3 sprint items
   checks: { evidenceLinks: number; unknownRefs: number; unverifiedNumbers: string[] };
 };
 
@@ -398,7 +416,8 @@ export async function writeBrief(runId: string): Promise<WrittenBrief> {
   const linker = makeLinker(data);
   const markdown = render(data, json, linker);
   const geminiText = [json.tldr, json.rising_falling, json.unresolved, json.emerging, json.competitor_commentary,
-    json.objections.map((o) => `${o.objection} ${o.response}`), json.sprint.map((s) => `${s.title} ${s.why}`)].flat().join(" ");
+    json.objections.map((o) => `${o.objection} ${o.response}`), json.sprint.map((s) => `${s.title} ${s.why}`),
+    json.opportunities.map((o) => `${o.struggle} ${o.why_it_matters}`)].flat().join(" ");
 
   // Same objections as section 7, as data: real evidence threads only.
   const byRef = new Map(data.evidence.map((e) => [e.ref, e]));
@@ -412,9 +431,24 @@ export async function writeBrief(runId: string): Promise<WrittenBrief> {
       .map((e) => ({ url: e.url, title: e.title, source: e.source })),
   }));
 
+  // Per-topic notes and sprint items, as data. Only real evidence survives;
+  // a note naming an unknown topic is dropped.
+  const refs = (ids: string[]): EvidenceRef[] =>
+    ids
+      .map((r) => byRef.get(r.trim()))
+      .filter((e): e is Evidence => Boolean(e))
+      .map((e) => ({ url: e.url, title: e.title, source: e.source }));
+  const topicNames = new Set(data.topics.map((t) => t.topic));
+  const opportunities: OpportunityNote[] = json.opportunities
+    .filter((o) => topicNames.has(o.topic))
+    .map((o) => ({ topic: o.topic, struggle: plain(o.struggle), whyItMatters: plain(o.why_it_matters), evidence: refs(o.evidence) }));
+  const recommendations: Recommendation[] = json.sprint.map((s) => ({ title: plain(s.title), why: plain(s.why), evidence: refs(s.evidence) }));
+
   return {
     markdown,
     objections,
+    opportunities,
+    recommendations,
     checks: {
       evidenceLinks: linker.used.size,
       unknownRefs: linker.unknownRefs(),
@@ -433,6 +467,8 @@ export async function createBrief(runId: string): Promise<{ id: string } & Writt
         run_id: runId,
         markdown: brief.markdown,
         objections: brief.objections,
+        opportunities: brief.opportunities,
+        recommendations: brief.recommendations,
         model: getModel(),
         checks: brief.checks,
         emailed_at: null,

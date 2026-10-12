@@ -1,0 +1,374 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-12T17:21:34+00:00",
+  "title": "Design System: Groundswell",
+  "extensions": {
+    "colorMeta": {
+      "binding-green": {
+        "role": "primary",
+        "displayName": "Archival Binding Green",
+        "canonical": "oklch(44.0% 0.083 156)",
+        "tonalRamp": [
+          "#001400",
+          "#002f12",
+          "#0b4c2d",
+          "#306c4a",
+          "#518c69",
+          "#72ae89",
+          "#98d5ae",
+          "#d7efe0"
+        ]
+      },
+      "series-forest": {
+        "role": "secondary",
+        "displayName": "Chart Forest",
+        "canonical": "oklch(51.5% 0.109 158)",
+        "tonalRamp": [
+          "#001600",
+          "#00320c",
+          "#005028",
+          "#0a6f45",
+          "#399164",
+          "#5db384",
+          "#84daa9",
+          "#d2f2df"
+        ]
+      },
+      "series-ochre": {
+        "role": "secondary",
+        "displayName": "Chart Ochre",
+        "canonical": "oklch(63.7% 0.136 63)",
+        "tonalRamp": [
+          "#2c0000",
+          "#4d0100",
+          "#6e2700",
+          "#914700",
+          "#b46800",
+          "#d98936",
+          "#f5b670",
+          "#fbe6cc"
+        ]
+      },
+      "catalogue-paper": {
+        "role": "neutral",
+        "displayName": "Catalogue Paper",
+        "canonical": "oklch(96.7% 0.008 91)",
+        "tonalRamp": [
+          "#0c0b07",
+          "#252420",
+          "#41403b",
+          "#5f5d58",
+          "#7f7d78",
+          "#a09e99",
+          "#c6c4be",
+          "#f0eee8"
+        ]
+      },
+      "record-sheet": {
+        "role": "neutral",
+        "displayName": "Record Sheet"
+      },
+      "sheet-fill": {
+        "role": "neutral",
+        "displayName": "Sheet Fill"
+      },
+      "binding-stock": {
+        "role": "neutral",
+        "displayName": "Binding Stock"
+      },
+      "charcoal-ink": {
+        "role": "neutral",
+        "displayName": "Charcoal Ink",
+        "canonical": "oklch(24.1% 0.008 118)",
+        "tonalRamp": [
+          "#0b0c08",
+          "#242520",
+          "#3f403c",
+          "#5d5e59",
+          "#7d7e79",
+          "#9e9f9a",
+          "#c3c5bf",
+          "#eeefea"
+        ]
+      },
+      "ink-secondary": {
+        "role": "neutral",
+        "displayName": "Secondary Ink"
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink"
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Hairline"
+      },
+      "hairline-strong": {
+        "role": "neutral",
+        "displayName": "Strong Hairline"
+      },
+      "warn": {
+        "role": "status",
+        "displayName": "Unresolved Amber",
+        "canonical": "oklch(50.8% 0.108 73)",
+        "tonalRamp": [
+          "#230000",
+          "#411500",
+          "#613300",
+          "#815200",
+          "#a47228",
+          "#c7934c",
+          "#e8bb80",
+          "#f6ead2"
+        ]
+      },
+      "bad": {
+        "role": "status",
+        "displayName": "Failure Brick",
+        "canonical": "oklch(49.1% 0.145 30)",
+        "tonalRamp": [
+          "#330000",
+          "#570000",
+          "#7b0902",
+          "#9f3327",
+          "#c55646",
+          "#eb7867",
+          "#f4ab9f",
+          "#f5e1dd"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Lead Statement",
+        "purpose": "Overview lead problem statement only; 26px below sm, 30px from sm."
+      },
+      "headline": {
+        "displayName": "Page Title",
+        "purpose": "PageHeader titles; brand wordmark uses the same face at 18px."
+      },
+      "statement": {
+        "displayName": "Cataloguer's Note",
+        "purpose": "AI interpretation and insight statements, max 68ch."
+      },
+      "figure": {
+        "displayName": "Ledger Figure",
+        "purpose": "KPI values in the ruled ledger."
+      },
+      "title": {
+        "displayName": "Section Title",
+        "purpose": "Section headings and opportunity names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base interface text; brief prose at 1.65 leading, 72ch."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Record source, date, status, notes under figures."
+      },
+      "label": {
+        "displayName": "Field Label",
+        "purpose": "Ledger term labels, sentence case."
+      },
+      "record-id": {
+        "displayName": "Accession Id",
+        "purpose": "Record ids, ranks, scores, keywords; aligned figures only."
+      },
+      "display-compact": {
+        "displayName": "Lead Statement (compact)",
+        "purpose": "Overview lead statement below the sm breakpoint."
+      },
+      "subhead": {
+        "displayName": "Subhead",
+        "purpose": "Opportunity names, brief h1, opportunity score figure."
+      },
+      "entry": {
+        "displayName": "Entry",
+        "purpose": "Ask questions, brief h2, brand wordmark."
+      },
+      "control": {
+        "displayName": "Control",
+        "purpose": "Navigation, buttons, filters, compact rows."
+      }
+    },
+    "shadows": [
+      {
+        "name": "nav-active-hairline",
+        "value": "0 1px 0 var(--line)",
+        "purpose": "Hairline under the active sidebar row; a rule, not lift."
+      },
+      {
+        "name": "drawer-edge",
+        "value": "8px 0 24px -12px rgb(0 0 0 / 0.25)",
+        "purpose": "Mobile navigation drawer only, which overlays the page."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-colors",
+        "value": "color, background-color 150ms ease",
+        "purpose": "Nav row and link-arrow hover; charts are not animated."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ],
+    "focus": {
+      "value": "2px solid var(--accent); outline-offset 2px; radius 3px",
+      "purpose": "Global :focus-visible ring."
+    },
+    "darkMode": "prefers-color-scheme with [data-theme] override; dark-* color tokens are the dark values of the same variables."
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single main action per view: Run now, Ask, Apply, Save.",
+      "html": "<button class=\"ds-btn-primary\">Run now</button>",
+      "css": ".ds-btn-primary{height:36px;padding:0 16px;border:0;border-radius:6px;background:var(--accent,#24603f);color:var(--accent-ink,#fff);font:500 14px/1 'Libre Franklin',system-ui,sans-serif;cursor:pointer}.ds-btn-primary:hover{opacity:.9}.ds-btn-primary:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}.ds-btn-primary:disabled{opacity:.6}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Secondary row actions such as Lock or Delete.",
+      "html": "<button class=\"ds-btn-quiet\">Lock</button>",
+      "css": ".ds-btn-quiet{height:36px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink-2,#45463f);font:400 13px/1 'Libre Franklin',system-ui,sans-serif;cursor:pointer;transition:background-color .15s,color .15s}.ds-btn-quiet:hover{background:var(--surface-2,#efece4);color:var(--ink,#1f201c)}.ds-btn-quiet:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Filter and form controls on record sheet with a strong hairline.",
+      "html": "<input class=\"ds-input\" placeholder=\"Title, excerpt, keyword\u2026\">",
+      "css": ".ds-input{height:36px;width:260px;padding:0 10px;border:1px solid var(--line-strong,#c8c2b3);border-radius:6px;background:var(--surface,#fbfaf6);color:var(--ink,#1f201c);font:400 13.5px 'Libre Franklin',system-ui,sans-serif}.ds-input::placeholder{color:var(--ink-3,#66665d)}.ds-input:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}"
+    },
+    {
+      "name": "Sidebar Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item",
+      "description": "Binding-stock sidebar rows; active row is a record-sheet fill with a green icon and hairline underline.",
+      "html": "<nav class=\"ds-nav\"><a class=\"ds-nav-item is-active\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1\"/></svg>Overview</a><a class=\"ds-nav-item\" href=\"#\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\"><path d=\"M22 7l-8.5 8.5-5-5L2 17\"/><path d=\"M16 7h6v6\"/></svg>Trends</a></nav>",
+      "css": ".ds-nav{width:208px;padding:12px;background:var(--stock,#ece8df);display:flex;flex-direction:column;gap:2px}.ds-nav-item{display:flex;align-items:center;gap:10px;height:36px;padding:0 10px;border-radius:6px;color:var(--ink-2,#45463f);font:400 14px 'Libre Franklin',system-ui,sans-serif;text-decoration:none;transition:background-color .15s,color .15s}.ds-nav-item svg{color:var(--ink-3,#66665d)}.ds-nav-item:hover{background:color-mix(in srgb,var(--surface,#fbfaf6) 60%,transparent);color:var(--ink,#1f201c)}.ds-nav-item.is-active{background:var(--surface,#fbfaf6);color:var(--ink,#1f201c);font-weight:500;box-shadow:0 1px 0 var(--line,#dcd7cb)}.ds-nav-item.is-active svg{color:var(--accent,#24603f)}.ds-nav-item:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}"
+    },
+    {
+      "name": "Query Chip",
+      "kind": "chip",
+      "refersTo": "chip-query",
+      "description": "Example questions on Ask.",
+      "html": "<button class=\"ds-chip\">Which CI problems are rising?</button>",
+      "css": ".ds-chip{padding:6px 12px;border:1px solid var(--line-strong,#c8c2b3);border-radius:4px;background:transparent;color:var(--ink-2,#45463f);font:400 13px 'Libre Franklin',system-ui,sans-serif;cursor:pointer}.ds-chip:hover{border-color:var(--ink-3,#66665d);background:var(--surface,#fbfaf6);color:var(--ink,#1f201c)}.ds-chip:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}"
+    },
+    {
+      "name": "Ruled Ledger",
+      "kind": "card",
+      "refersTo": "sheet",
+      "description": "KPI figures in a hairline-ruled four-column dl instead of tiles.",
+      "html": "<dl class=\"ds-ledger\"><div><dt>Relevant discussions</dt><dd class=\"ds-fig\">75</dd><dd class=\"ds-note\">Of 236 collected, after AI relevance filtering</dd></div><div><dt>Pain-point topics active</dt><dd class=\"ds-fig\">9<span> of 9</span></dd><dd class=\"ds-note\">Monitored topics with a relevant discussion</dd></div><div><dt>Emerging issues</dt><dd class=\"ds-fig\">2<span> suggestions</span></dd><dd class=\"ds-note\">Awaiting your review</dd></div><div><dt>Unresolved share</dt><dd class=\"ds-fig\">77%</dd><dd class=\"ds-note\">58 of 75 show no working fix</dd></div></dl>",
+      "css": ".ds-ledger{display:grid;grid-template-columns:repeat(4,1fr);margin:0;border-top:1px solid var(--line,#dcd7cb);border-bottom:1px solid var(--line,#dcd7cb);font-family:'Libre Franklin',system-ui,sans-serif;color:var(--ink,#1f201c)}.ds-ledger>div{padding:16px 16px 16px 0}.ds-ledger>div+div{border-left:1px solid var(--line,#dcd7cb);padding-left:16px}.ds-ledger dt{font-size:13px;font-weight:500;color:var(--ink-2,#45463f)}.ds-ledger dd{margin:0}.ds-fig{margin-top:4px!important;font-size:32px;line-height:1;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums lining-nums}.ds-fig span{font-size:14px;font-weight:400;color:var(--ink-3,#66665d)}.ds-note{margin-top:8px!important;font-size:12.5px;line-height:1.35;color:var(--ink-3,#66665d)}"
+    },
+    {
+      "name": "Record Row",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "The catalogued evidence unit: accession id column plus linked title and meta line.",
+      "html": "<div class=\"ds-record\"><p class=\"ds-rid\">GH \u202677317370</p><div><a class=\"ds-rtitle\" href=\"#\">integration/v2 has no required checks<svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M7 17L17 7M7 7h10v10\"/></svg></a><p class=\"ds-rmeta\"><span>GitHub Issues</span><span>12 Oct 2026</span><span class=\"ds-warn\">Unresolved</span><span>Severity 4/5</span></p></div></div>",
+      "css": ".ds-record{display:grid;grid-template-columns:7.5rem minmax(0,1fr);column-gap:16px;padding:12px 0;border-top:1px solid var(--line,#dcd7cb);border-bottom:1px solid var(--line,#dcd7cb);font-family:'Libre Franklin',system-ui,sans-serif}.ds-rid{margin:0;font:400 11.5px/24px 'Source Code Pro',ui-monospace,monospace;font-variant-numeric:tabular-nums;color:var(--ink-3,#66665d)}.ds-rtitle{font-size:14px;font-weight:500;line-height:1.375;color:var(--ink,#1f201c);text-decoration:none;text-underline-offset:3px;text-decoration-color:var(--line-strong,#c8c2b3)}.ds-rtitle svg{margin-left:2px;vertical-align:-1px;color:var(--ink-3,#66665d);transition:color .15s}.ds-rtitle:hover{text-decoration:underline}.ds-rtitle:hover svg{color:var(--accent,#24603f)}.ds-rtitle:focus-visible{outline:2px solid var(--accent,#24603f);outline-offset:2px}.ds-rmeta{margin:2px 0 0;display:flex;flex-wrap:wrap;gap:0 10px;font-size:12.5px;color:var(--ink-3,#66665d)}.ds-warn{color:var(--warn,#8a5a00)}"
+    },
+    {
+      "name": "AI Interpretation",
+      "kind": "custom",
+      "refersTo": "ai-tag",
+      "description": "Provenance tag and serif statement that set the cataloguer's note apart from source.",
+      "html": "<div class=\"ds-ai\"><span class=\"ds-ai-tag\">AI interpretation</span><p>Teams struggle with stale required check contexts and bypass loopholes in branch protection.</p></div>",
+      "css": ".ds-ai{border-top:1px solid var(--line,#dcd7cb);padding-top:16px;max-width:68ch}.ds-ai-tag{display:inline-flex;padding:1px 6px;border:1px solid var(--line-strong,#c8c2b3);border-radius:4px;font:500 11.5px 'Libre Franklin',system-ui,sans-serif;color:var(--ink-2,#45463f)}.ds-ai p{margin:8px 0 0;font:400 17px/1.625 'Source Serif 4',Georgia,serif;color:var(--ink,#1f201c)}"
+    },
+    {
+      "name": "Lifecycle State",
+      "kind": "custom",
+      "refersTo": "",
+      "description": "Fixed-scale trend word with counts: new, rising, steady, falling, too few to compare.",
+      "html": "<span class=\"ds-life\"><span class=\"ds-life-n\">19 \u2192 8</span><span class=\"ds-life-s\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M22 17l-8.5-8.5-5 5L2 7\"/><path d=\"M16 17h6v-6\"/></svg>falling 58%</span></span>",
+      "css": ".ds-life{display:inline-flex;align-items:center;gap:6px;font:400 13px 'Libre Franklin',system-ui,sans-serif;font-variant-numeric:tabular-nums lining-nums}.ds-life-n{color:var(--ink-2,#45463f)}.ds-life-s{display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--ink,#1f201c)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Finding Aid",
+    "overview": "Groundswell reads like an archive's finding aid for developer pain. Every claim is a catalogued record with an accession id and provenance. The cataloguer's note (AI interpretation) is tagged and sits visibly apart from the original document. The page is warm catalogue paper with a cooler binding stock for the sidebar and charcoal ink. Archival binding green is the only accent, and it marks the active, primary, and positive states.\n\nStructure comes from rules, not containers. One visible hairline grid holds the page: a ruled four-column ledger of figures, then a three-plus-one split where the side column sits under the ledger's fourth column rule. Records are rows divided by hairlines. They are not cards. The density is that of a working reference: compact rows, tabular figures in fixed columns, a serif voice kept for the few statements that matter, and grotesque type for everything operational.\n\nThe system rejects the KPI-tile SaaS dashboard of equal rounded, shadowed cards. Figures go in a ruled ledger and evidence goes in catalogued rows.",
+    "keyCharacteristics": [
+      "Warm paper page, cooler binding-stock sidebar, charcoal ink, one forest-green accent.",
+      "Hairline rules for every division. No shadows on content.",
+      "Corners stay square-ish, with 6px as the ceiling.",
+      "Serif type only for page titles, the lead statement, and AI or editorial statements. Grotesque type for the interface. Monospace only for record ids and figures that must align.",
+      "Lifecycle states use one fixed vocabulary: new, rising, steady, falling, too few to compare.",
+      "Light and dark themes switch in one place through CSS variables."
+    ],
+    "rules": [
+      {
+        "name": "The One Binding Rule",
+        "body": "Binding green is the only interface accent. Anything active, primary, or positive is green, and nothing decorative is.",
+        "section": "colors"
+      },
+      {
+        "name": "The Chart Pair Rule",
+        "body": "Charts use the validated forest/ochre pair and nothing else. Forest marks the primary measure (kept, resolved, relevant). Ochre marks its counterpart (unresolved, collected).",
+        "section": "colors"
+      },
+      {
+        "name": "The One Switch Rule",
+        "body": "Every color comes from the CSS variables in `app/globals.css`. Components never carry literal hex values, so light and dark change in one place.",
+        "section": "colors"
+      },
+      {
+        "name": "The Accession Rule",
+        "body": "Monospace is reserved for record ids, ranks, scores, keywords, and figures that must align in a column. It is never used for prose, headings, or decoration.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every number that can be compared vertically carries `tabular-nums lining-nums` (the `.tabular` utility).",
+        "section": "typography"
+      },
+      {
+        "name": "The Sentence Case Rule",
+        "body": "Labels are sentence case at normal tracking. There are no uppercase tracked micro-labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Sheet Rule",
+        "body": "Sheets, records, ledgers, charts, and empty states have no shadow. Separation comes from a hairline border or a tonal step, never from elevation.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** take every color from the CSS variables in `app/globals.css` so light and dark switch together.",
+      "**Do** put KPIs in a ruled ledger with hairline column rules and tabular 32px figures, with units and notes in muted ink.",
+      "**Do** render evidence as Record Rows with a monospace accession id, a link to the original, and source/date/status meta.",
+      "**Do** tag AI output with the \"AI interpretation\" label and set it apart in serif; label measured facts \"Observed in discussions\".",
+      "**Do** express trend direction only with the lifecycle vocabulary (new, rising, steady, falling, too few to compare), always with its counts.",
+      "**Do** keep corners at or below 6px and separate everything with 1px hairlines.",
+      "**Do** pair every chart with a legend and a \"Show as table\" fallback, using only the forest/ochre series pair."
+    ],
+    "donts": [
+      "**Don't** build KPI-tile dashboards of equal rounded, shadowed cards.",
+      "**Don't** put shadows on content. The only shadows are the active-nav hairline and the mobile drawer edge.",
+      "**Don't** introduce a second interface accent. Ochre belongs to charts; warn and bad belong to state.",
+      "**Don't** use monospace for prose or headings, or serif for operational labels and controls.",
+      "**Don't** set labels in uppercase with wide tracking.",
+      "**Don't** let AI interpretation share the styling of source records."
+    ]
+  }
+}

@@ -2,6 +2,7 @@
 // can see what worked, what failed and why.
 
 import { connection } from "next/server";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { getRuns, sourceOutcome, type RunRow } from "@/lib/db/dashboard";
 import { fmtDateTime, fmtDuration, SOURCE_LABEL } from "@/lib/format";
 
@@ -17,13 +18,22 @@ export default async function RunsPage() {
   const runs = await getRuns();
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-      <h1 className="text-2xl font-semibold tracking-tight">Run history</h1>
-      <p className="mt-1 text-sm text-ink-3">
-        Scheduled every Friday at 8:00 AM IST, plus manual runs. If any source fails, even partly, the run continues and is marked partial.
-      </p>
+    <main className="mx-auto max-w-[1200px] px-5 py-6 lg:px-10 lg:py-8">
+      <PageHeader
+        title="Runs"
+        description={
+          <p>
+            Every collection run: scheduled every Friday at 8:00 AM IST, plus manual runs. If any source fails, even partly, the run continues and is
+            marked partial, so a green status always means complete data.
+          </p>
+        }
+      />
 
-      {runs.length === 0 && <p className="mt-6 text-sm text-ink-3">No runs yet.</p>}
+      {runs.length === 0 && (
+        <div className="mt-6">
+          <EmptyState title="No runs yet">The first scheduled run is on Friday at 8:00 AM IST, or start one from the Overview.</EmptyState>
+        </div>
+      )}
 
       <ul className="mt-6 space-y-3">
         {runs.map((run) => (
@@ -52,7 +62,7 @@ function RunItem({ run }: { run: RunRow }) {
   ].filter(Boolean) as string[];
 
   return (
-    <li className="rounded-xl border border-line bg-surface p-4">
+    <li className="rounded-md border border-line bg-surface p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <p className="font-medium">
           {fmtDateTime(run.startedAt)}

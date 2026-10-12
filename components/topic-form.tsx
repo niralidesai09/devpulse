@@ -46,7 +46,7 @@ export function TopicForm({ topic, submitLabel }: { topic?: TopicValues; submitL
         Active (monitored in the weekly run)
       </label>
       <div className="flex items-center gap-3">
-        <button type="submit" disabled={pending} className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-white disabled:opacity-60 dark:text-[#0d1726]">
+        <button type="submit" disabled={pending} className="h-9 rounded-md bg-accent px-4 text-sm font-medium text-accent-ink disabled:opacity-60">
           {pending ? "Saving…" : submitLabel}
         </button>
         {state && (

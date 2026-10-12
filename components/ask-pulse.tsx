@@ -42,14 +42,9 @@ export function AskPulse() {
   }
 
   return (
-    <section id="ask" className="mt-10 scroll-mt-4 rounded-xl border border-line bg-surface p-4 sm:p-6" aria-labelledby="ask-heading">
-      <h2 id="ask-heading" className="text-sm font-semibold">
-        Ask the Pulse
-      </h2>
-      <p className="mt-0.5 text-xs text-ink-3">Answers come only from posts Groundswell has collected, with links to every source.</p>
-
+    <section aria-label="Ask a question">
       <form
-        className="mt-3 flex flex-col gap-2 sm:flex-row"
+        className="flex flex-col gap-2 sm:flex-row"
         onSubmit={(e) => {
           e.preventDefault();
           ask(question);
@@ -64,14 +59,14 @@ export function AskPulse() {
           onChange={(e) => setQuestion(e.target.value)}
           maxLength={300}
           placeholder="e.g. What CI problems do developers complain about most?"
-          className="h-10 min-w-0 flex-1 rounded-md border border-line bg-surface px-3 text-sm placeholder:text-ink-3"
+          className="h-11 min-w-0 flex-1 rounded-md border border-line-strong bg-surface px-3.5 text-[15px] placeholder:text-ink-3"
         />
         <button
           type="submit"
           disabled={busy || question.trim().length < 3}
-          className="h-10 rounded-md bg-accent px-4 text-sm font-medium text-white disabled:opacity-50 dark:text-[#0d1726]"
+          className="h-11 rounded-md bg-accent px-5 text-[14px] font-medium text-accent-ink hover:opacity-90 disabled:opacity-50"
         >
-          {busy ? "Thinking…" : "Ask"}
+          {busy ? "Searching…" : "Ask"}
         </button>
       </form>
 
@@ -82,7 +77,7 @@ export function AskPulse() {
               key={q}
               type="button"
               onClick={() => ask(q)}
-              className="rounded-full border border-line px-3 py-1 text-xs text-ink-2 hover:border-ink-3 hover:text-ink"
+              className="rounded-sm border border-line-strong px-3 py-1.5 text-[13px] text-ink-2 hover:border-ink-3 hover:bg-surface hover:text-ink"
             >
               {q}
             </button>
@@ -90,10 +85,10 @@ export function AskPulse() {
         </div>
       )}
 
-      <ol className="mt-4 space-y-4" aria-live="polite">
+      <ol className="mt-8 space-y-8" aria-live="polite">
         {turns.map((t, i) => (
           <li key={turns.length - i} className="border-t border-line pt-4 first:border-0 first:pt-0">
-            <p className="text-sm font-medium">{t.question}</p>
+            <p className="font-serif text-[18px] font-semibold">{t.question}</p>
             {t.error ? (
               <p className="mt-1 text-sm text-bad">{t.error}</p>
             ) : t.answer === undefined ? (

@@ -1,7 +1,9 @@
-// Read-only queries for the dashboard pages ("/" and "/runs").
-// Server only (uses the service-role client).
+// Read-only queries for the app's pages. Server only (service-role client).
+// Every number shown in the UI comes from these functions, which read the
+// stored runs, posts, topic_stats and briefs; nothing here is invented.
 
 import { formatRunComparison, formatTrend, type GrowthBasis, type Trend, type TrendDetail } from "@/lib/pipeline/scoring";
+import type { OpportunityNote, Recommendation } from "@/lib/pipeline/brief";
 import { createServerClient } from "./supabase";
 
 export type SourceStatus = {
@@ -34,6 +36,8 @@ export type RunRow = {
 };
 
 export type EvidenceLink = {
+  externalId: string;
+  postedAt: string | null;
   title: string;
   url: string;
   source: string;
@@ -54,13 +58,15 @@ export type TopicCard = {
   avgSentiment: number | null;
   trend: Trend;
   changePct: number | null;
-  trendLabel: string; // HN keyword trend with counts, e.g. "11 → 19 (▲ 73%)"
+  trendLabel: string; // HN keyword trend with counts, e.g. "11 → 19 · rising 73%"
   vsPreviousRun: string; // all-source mentions vs the previous weekly run (or why not)
   growthBasis: GrowthBasis;
   keywordsThisWeek: number | null;
   keywordsLastWeek: number | null;
   components: { frequency: number; growth: number; unresolved: number; severity: number; raw: number };
   evidence: EvidenceLink[]; // top 3 threads that best justify the score
+  sources: Record<string, number>; // relevant discussions per source, for this topic
+  note: OpportunityNote | null; // AI interpretation from the brief (top topics only)
 };
 
 export type CompetitorRow = {
@@ -74,12 +80,23 @@ export type CompetitorRow = {
 export type ObjectionRow = { objection: string; response: string; evidence: { url: string; title: string; source: string }[] };
 
 export type Dashboard = {
-  run: RunRow;
+  run: RunRow; // the latest run that produced data (success or partial)
+  latestAttempt: RunRow | null; // the latest run of any status (may be failed / running)
+  previousComparable: { runId: string; windowEnd: string | null; kept: number } | null;
   topics: TopicCard[]; // ranked by Opportunity Score
   competitors: CompetitorRow[]; // most-mentioned first
   objections: ObjectionRow[];
+  recommendations: Recommendation[];
   brief: { markdown: string; emailedAt: string | null; emailError: string | null; model: string | null } | null;
-  totals: { collected: number; kept: number; unresolved: number };
+  totals: {
+    collected: number;
+    kept: number;
+    unresolved: number;
+    unmonitored: number; // relevant, but no monitored topic fits ("other")
+    activeTopics: number; // monitored topics with at least one relevant discussion
+    monitoredTopics: number;
+    bySource: Record<string, number>; // relevant discussions per source
+  };
 };
 
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
@@ -115,11 +132,18 @@ export async function getDashboard(): Promise<Dashboard | null> {
     supabase.from("topic_stats").select("*").eq("run_id", run.id).order("opportunity_score", { ascending: false }),
     supabase
       .from("posts")
-      .select("topic_id, title, url, source, pain_point, is_unresolved, unresolved_reason, severity, sentiment, competitors, score, comment_count")
+      .select(
+        "external_id, posted_at, topic_id, title, url, source, pain_point, is_unresolved, unresolved_reason, severity, sentiment, competitors, score, comment_count",
+      )
       .eq("run_id", run.id),
     supabase.from("topics").select("id, name"),
-    supabase.from("briefs").select("markdown, emailed_at, email_error, model, objections").eq("run_id", run.id).maybeSingle(),
+    supabase
+      .from("briefs")
+      .select("markdown, emailed_at, email_error, model, objections, opportunities, recommendations")
+      .eq("run_id", run.id)
+      .maybeSingle(),
   ]);
+  const notes = ((brief?.opportunities ?? []) as OpportunityNote[]).filter((n) => n.topic);
 
   const nameById = new Map((topics ?? []).map((t) => [t.id as string, t.name as string]));
   const engagement = (p: { score: number | null; comment_count: number | null }) => (p.score ?? 0) + (p.comment_count ?? 0);
@@ -164,6 +188,8 @@ export async function getDashboard(): Promise<Dashboard | null> {
         .sort(byJustification)
         .slice(0, 3)
         .map((p) => ({
+          externalId: p.external_id,
+          postedAt: p.posted_at,
           title: p.title,
           url: p.url,
           source: p.source,
@@ -172,6 +198,8 @@ export async function getDashboard(): Promise<Dashboard | null> {
           unresolvedReason: p.unresolved_reason,
           severity: p.severity,
         })),
+      sources: countBy(allPosts.filter((p) => p.topic_id === s.topic_id).map((p) => p.source)),
+      note: notes.find((n) => n.topic === nameById.get(s.topic_id)) ?? null,
     };
   });
 
@@ -192,8 +220,24 @@ export async function getDashboard(): Promise<Dashboard | null> {
     .sort((a, b) => b.mentions - a.mentions || a.tool.localeCompare(b.tool));
 
   const runRow = toRunRow(run);
+
+  // Freshness: the newest run of ANY status, so a failed or running
+  // collection is never hidden behind the last good one.
+  const { data: latest } = await supabase.from("runs").select("*").order("started_at", { ascending: false }).limit(1).maybeSingle();
+
+  // A previous weekly run to compare with: only the one the pipeline itself
+  // judged comparable (window 6-8 days earlier, every source complete).
+  let previousComparable: Dashboard["previousComparable"] = null;
+  if (runRow.stats.previousRunComparable && runRow.stats.previousRunId) {
+    const { data: prev } = await supabase.from("runs").select("id, window_end, stats").eq("id", runRow.stats.previousRunId as string).maybeSingle();
+    if (prev) previousComparable = { runId: prev.id, windowEnd: prev.window_end, kept: Number(prev.stats?.postsKept ?? 0) };
+  }
+
   return {
     run: runRow,
+    latestAttempt: latest ? toRunRow(latest) : null,
+    previousComparable,
+    recommendations: ((brief?.recommendations ?? []) as Recommendation[]).filter((r) => r.title),
     topics: cards,
     competitors,
     objections: ((brief?.objections ?? []) as ObjectionRow[]).filter((o) => o.objection),
@@ -204,8 +248,63 @@ export async function getDashboard(): Promise<Dashboard | null> {
       collected: Number(runRow.stats.postsCollected ?? 0),
       kept: allPosts.length,
       unresolved: allPosts.filter((p) => p.is_unresolved).length,
+      unmonitored: allPosts.filter((p) => p.topic_id === null).length,
+      activeTopics: cards.filter((c) => c.mentions > 0).length,
+      monitoredTopics: cards.length,
+      bySource: countBy(allPosts.map((p) => p.source)),
     },
   };
+}
+
+function countBy(values: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of values) out[v] = (out[v] ?? 0) + 1;
+  return out;
+}
+
+export type WeekPoint = { weekEnding: string; runId: string; kept: number; byTopic: Record<string, number> };
+
+/**
+ * Weekly history: newest run first, then each earlier point must have a
+ * window ending at least 6 days before the previous point, so the 7-day
+ * windows don't overlap (runs in the same week re-collect a rolling window
+ * and would fake a "change"). Weeks with no run are simply absent: missing
+ * is never drawn as zero.
+ */
+export async function getWeeklyHistory(maxWeeks = 12): Promise<WeekPoint[]> {
+  const supabase = createServerClient();
+  const { data: runs } = await supabase
+    .from("runs")
+    .select("id, window_end, stats")
+    .in("status", ["success", "partial"])
+    .not("window_end", "is", null)
+    .order("window_end", { ascending: false })
+    .limit(200);
+
+  const picked: { id: string; windowEnd: string; kept: number }[] = [];
+  for (const r of runs ?? []) {
+    const last = picked.at(-1);
+    if (!last || new Date(last.windowEnd).getTime() - new Date(r.window_end).getTime() >= 6 * 86_400_000) {
+      picked.push({ id: r.id, windowEnd: r.window_end, kept: Number(r.stats?.postsKept ?? 0) });
+    }
+    if (picked.length === maxWeeks) break;
+  }
+  const weeks = picked.reverse();
+  if (!weeks.length) return [];
+
+  const [{ data: stats }, { data: topics }] = await Promise.all([
+    supabase.from("topic_stats").select("run_id, topic_id, mention_count").in("run_id", weeks.map((w) => w.id)),
+    supabase.from("topics").select("id, name"),
+  ]);
+  const nameById = new Map((topics ?? []).map((t) => [t.id as string, t.name as string]));
+  return weeks.map((w) => ({
+    weekEnding: w.windowEnd,
+    runId: w.id,
+    kept: w.kept,
+    byTopic: Object.fromEntries(
+      (stats ?? []).filter((s) => s.run_id === w.id).map((s) => [nameById.get(s.topic_id) ?? "Deleted topic", s.mention_count as number]),
+    ),
+  }));
 }
 
 /** Run history, newest first. */

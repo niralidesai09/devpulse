@@ -16,9 +16,9 @@ export function EmergingRadar({
   unlocked: boolean;
 }) {
   return (
-    <section className="mt-10" aria-labelledby="radar-heading">
+    <section id="radar" className="scroll-mt-20" aria-labelledby="radar-heading">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="radar-heading" className="text-sm font-semibold">
+        <h2 id="radar-heading" className="text-[15px] font-semibold">
           Emerging topic radar
         </h2>
         <p className="text-xs text-ink-3">
@@ -27,16 +27,16 @@ export function EmergingRadar({
       </div>
 
       {pending.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-dashed border-line bg-surface p-4 text-sm text-ink-3">
+        <p className="mt-3 rounded-md border border-dashed border-line bg-surface p-4 text-sm text-ink-3">
           No new topic suggestions this week.
         </p>
       ) : (
-        <ul className="mt-3 grid gap-3 md:grid-cols-2">
+        <ul className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-2">
           {pending.map((s) => (
-            <li key={s.id} className="flex flex-col rounded-xl border border-line bg-surface p-4">
+            <li key={s.id} className="flex min-w-0 flex-col rounded-md border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-medium">{s.name}</h3>
-                <span className="shrink-0 rounded-full bg-accent-soft px-2 py-0.5 text-xs text-accent">
+                <span className="tabular shrink-0 rounded-sm bg-accent-soft px-2 py-0.5 text-xs text-accent">
                   {s.postCount} thread{s.postCount === 1 ? "" : "s"}
                 </span>
               </div>
