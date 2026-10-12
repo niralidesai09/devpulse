@@ -1,375 +1,372 @@
-// Overview — answers, in order: what are developers talking about, what is
-// growing, what is fading, what is unresolved, what should we do next, and
-// what evidence supports it. Deterministic numbers and AI text are labelled.
+// Overview — an intelligence briefing, read top to bottom:
+//   1. What happened        → the week in developer conversations (AI, cited)
+//   2. How big              → four metrics, computed by code
+//   3. What needs attention → top three pain points
+//   4. What is moving       → topic movement, this week vs last
+//   5. What to do           → recommended next actions (AI, cited)
+//   6. Can I trust it       → source health
 
+import { ArrowRight, FileText, Inbox } from "lucide-react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { TopicCompareChart, VolumeChart } from "@/components/charts";
-import { EvidenceChips } from "@/components/Evidence";
-import { PainPointTable } from "@/components/PainPointTable";
+import type { ReactNode } from "react";
+import { EvidenceLinks } from "@/components/Evidence";
 import { RunControls } from "@/components/RunControls";
 import {
-  AiBadge,
-  Badge,
+  AiLabel,
   ButtonLink,
-  Callout,
-  Card,
-  CardBody,
-  CardHeader,
+  cx,
+  Divider,
   EmptyState,
   ErrorPanel,
-  MiniBar,
+  EvidenceMeter,
+  Metric,
   PageHeader,
-  SourceBadge,
-  Stat,
+  PairBar,
+  Section,
+  SourceTag,
+  StatusDot,
   TrendBadge,
 } from "@/components/ui";
-import type { PainPointMetric } from "@/lib/analytics/metrics";
 import { isAdmin } from "@/lib/auth";
 import { LOOKBACK_WEEKS } from "@/lib/config";
 import { safeLoad } from "@/lib/db/safe";
-import { fmtDateTime, fmtRelative, fmtSigned, sourceColorVar, sourceLabel, TZ_LABEL } from "@/lib/format";
+import { fmtDateTime, fmtRelative, sourceLabel, TZ_LABEL } from "@/lib/format";
 import { loadOverview } from "@/lib/views/overview";
 
-function ChangeList({ items, empty }: { items: PainPointMetric[]; empty: string }) {
-  if (!items.length) return <p className="text-xs text-text-3">{empty}</p>;
-  return (
-    <ul className="space-y-2">
-      {items.slice(0, 4).map((p) => (
-        <li key={p.painPointId} className="flex items-start justify-between gap-3 text-sm">
-          <Link href={`/pain-points/${p.painPointId}`} className="min-w-0 text-text hover:underline">
-            {p.title}
-          </Link>
-          <span className="tabular shrink-0 text-xs text-text-2">
-            {p.previous} → {p.current}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
+const STATE_TONE = { current: "ok", stale: "warn", incomplete: "warn", unavailable: "idle" } as const;
+
+function changeText(current: number, previous: number, status: string) {
+  if (status === "new") return "not seen last week";
+  if (current === previous) return "same as last week";
+  return `${current > previous ? "+" : "−"}${Math.abs(current - previous)} vs last week`;
 }
 
 export default async function OverviewPage() {
   await connection();
   const [admin, loaded] = await Promise.all([isAdmin(), safeLoad(loadOverview)]);
 
+  const header = (actions?: ReactNode, meta?: ReactNode) => (
+    <PageHeader
+      title="Developer Pulse"
+      description="Understand what developers are struggling with, and what your product should solve next."
+      actions={actions}
+      meta={meta}
+    />
+  );
+
   if (!loaded.ok) {
     return (
       <>
-        <PageHeader title="Developer Community Pulse" />
-        <ErrorPanel title="The dashboard could not load its data" error={loaded.error} hint={loaded.isConfig ? "This is a configuration problem, not missing data — see README → Setup." : "Try again in a minute. If it persists, check Data health."} />
+        {header()}
+        <ErrorPanel
+          title="The overview could not load its data"
+          error={loaded.error}
+          hint={loaded.isConfig ? "This is a setup problem, not missing data — see README → Setup." : "Try again in a minute. If it persists, open Sources & Data Health."}
+        />
       </>
     );
   }
 
-  const { metrics: m, report, reportIsCurrent, evidence, lastGoodRun, lastRun, running, decisions, metricsSource } = loaded.data;
+  const { metrics: m, report, reportIsCurrent, evidence, lastGoodRun, running, descriptions, sources, dataState } = loaded.data;
   const brief = reportIsCurrent ? report?.brief : null;
-  const pp = m.painPoints;
-  const byId = new Map(pp.map((p) => [p.painPointId, p]));
-  const growing = m.groups.growing.map((id) => byId.get(id)!).filter(Boolean);
-  const emerging = m.groups.new.map((id) => byId.get(id)!).filter(Boolean).sort((a, b) => b.current - a.current);
-  const declining = [...m.groups.declining, ...m.groups.gone].map((id) => byId.get(id)!).filter(Boolean);
-  const unresolved = pp
-    .filter((p) => p.current >= 2 && p.unresolvedCurrent / p.current >= 0.5)
-    .sort((a, b) => b.unresolvedCurrent - a.unresolvedCurrent || b.signalScore - a.signalScore)
-    .slice(0, 5);
   const hasData = m.totals.current.unique + m.totals.previous.unique > 0;
-  const maxSource = Math.max(1, ...m.sources.map((s) => s.current));
+  const attention = m.painPoints.filter((p) => p.current > 0).slice(0, 3);
+  const topics = m.topics.filter((t) => t.current + t.previous > 0);
+  const topicMax = Math.max(1, ...topics.flatMap((t) => [t.current, t.previous]));
+  const notes = [...m.quality.warnings, ...(m.retrospective.note ? [m.retrospective.note] : [])];
+
+  const meta = (
+    <>
+      <span>
+        Week of <span className="text-ink-2">{m.current.label}</span> · Fri–Thu {TZ_LABEL}
+      </span>
+      <span title={lastGoodRun ? fmtDateTime(lastGoodRun.finished_at) : undefined}>Updated {lastGoodRun ? fmtRelative(lastGoodRun.finished_at) : "never"}</span>
+      <span className="inline-flex items-center gap-1.5" title={dataState.detail}>
+        <StatusDot tone={STATE_TONE[dataState.key]} />
+        {dataState.label}
+      </span>
+    </>
+  );
+
+  if (!hasData) {
+    return (
+      <>
+        {header(<RunControls isAdmin={admin} runningRunId={running?.id ?? null} showReport={false} />, meta)}
+        <EmptyState
+          icon={<Inbox className="size-8" strokeWidth={1.5} aria-hidden />}
+          title="No discussions collected yet"
+          action={admin ? undefined : <ButtonLink href="/login" variant="primary">Sign in to collect data</ButtonLink>}
+        >
+          The first collection reads the last {LOOKBACK_WEEKS} complete weeks from Hacker News, GitHub, Stack Overflow and DEV, so a full briefing is
+          ready in a few minutes. Week-on-week trends become more reliable with every weekly run.
+        </EmptyState>
+      </>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        eyebrow={
-          <span className="inline-flex flex-wrap items-center gap-x-2">
-            <span>Reporting week {m.current.label}</span>
-            <span className="text-text-3">· Fri–Thu, {TZ_LABEL}</span>
-          </span>
-        }
-        title="What developers are saying this week"
-        description={
+    <div className="space-y-14">
+      {header(<RunControls isAdmin={admin} runningRunId={running?.id ?? null} />, meta)}
+
+      {/* 1 — What happened */}
+      <section aria-labelledby="takeaway" className="-mt-4 rounded-[var(--radius-lg)] border border-line bg-panel px-6 py-6 sm:px-8 sm:py-7">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="takeaway" className="text-[12px] font-medium tracking-[0.06em] text-ink-3 uppercase">
+            The week in developer conversations
+          </h2>
+          {brief && <AiLabel>Written by Gemini from {evidence.size} cited discussions</AiLabel>}
+        </div>
+
+        {brief ? (
           <>
-            Last successful collection{" "}
-            <strong className="font-medium text-text">{lastGoodRun ? fmtRelative(lastGoodRun.finished_at) : "never"}</strong>
-            {lastGoodRun && <span className="text-text-3"> ({fmtDateTime(lastGoodRun.finished_at)})</span>}
-            {lastRun && lastRun.status === "failed" && (
-              <>
-                {" · "}
-                <Link href="/health" className="text-bad hover:underline">
-                  latest run failed
-                </Link>
-              </>
-            )}
-            . Numbers are computed from stored discussions{metricsSource === "report" ? " (snapshot from the current brief)" : " (live)"}.
-          </>
-        }
-        actions={<RunControls isAdmin={admin} runningRunId={running?.id ?? null} />}
-      />
-
-      {!hasData && (
-        <EmptyState
-          title="No discussions collected yet"
-          action={admin ? undefined : <ButtonLink href="/login" variant="primary">Sign in to start the first collection</ButtonLink>}
-        >
-          The first collection looks back {LOOKBACK_WEEKS} complete weeks across Hacker News, GitHub Issues, Stack Overflow and DEV, so a current
-          report is available immediately. Week-on-week trends compare like-for-like sources and become more reliable with every weekly run.
-        </EmptyState>
-      )}
-
-      {hasData && m.quality.warnings.length > 0 && (
-        <Callout tone="warn" title="Read these numbers with care">
-          <ul className="list-disc space-y-0.5 pl-4">
-            {m.quality.warnings.map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-            {m.retrospective.note && <li>{m.retrospective.note}</li>}
-          </ul>
-        </Callout>
-      )}
-
-      {hasData && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat
-            label="Unique discussions"
-            hint="Distinct threads/issues/posts published this week that matched a monitored keyword, after deduplication, across all sources (excludes items you excluded)."
-            value={<span className="tabular">{m.totals.current.unique}</span>}
-            sub={`previous week ${m.totals.previous.unique}`}
-          />
-          <Stat
-            label="Relevant to our market"
-            hint="Of the unique discussions, how many Gemini Flash judged to describe a real developer pain point or opinion in scope. Classification is an AI judgement — open any discussion to see the reasoning."
-            value={<span className="tabular">{m.totals.current.relevant}</span>}
-            sub={
-              <>
-                previous {m.totals.previous.relevant}
-                {m.totals.current.pending > 0 && <span className="text-warn"> · {m.totals.current.pending} awaiting analysis</span>}
-              </>
-            }
-          />
-          <Stat
-            label="Distinct pain points"
-            hint="Canonical problems (semantic groups) with at least one relevant discussion this week. Different wordings of the same problem are grouped together."
-            value={<span className="tabular">{m.totals.current.painPoints}</span>}
-            sub={`${m.groups.new.length} new · ${m.groups.recurring.length} recurring`}
-          />
-          <Stat
-            label="AI recommendations"
-            hint="Recommendations written by Gemini Flash in this week's brief. Each one must cite at least one stored discussion or it is removed."
-            value={<span className="tabular">{brief ? brief.recommendations.length : "—"}</span>}
-            sub={brief ? `from the brief generated ${fmtRelative(report!.completed_at)}` : "no brief for this week yet"}
-          />
-        </div>
-      )}
-
-      {hasData && (
-        <Card>
-          <CardHeader
-            title={
-              <span className="inline-flex items-center gap-2">
-                This week&apos;s brief <AiBadge />
-              </span>
-            }
-            description={brief ? `Generated ${fmtDateTime(report!.completed_at)} with ${report!.model}. Every bullet cites stored discussions.` : undefined}
-            actions={report && <ButtonLink href={`/reports/${report.id}`} size="sm">{reportIsCurrent ? "Open full report" : "Open latest report"}</ButtonLink>}
-          />
-          <CardBody>
-            {brief ? (
-              <>
-                <p className="text-[15px] font-medium leading-snug text-text">{brief.headline}</p>
-                <ul className="mt-3 space-y-2.5">
-                  {brief.executive_summary.map((b, i) => (
-                    <li key={i} className="text-sm text-text-2">
-                      <p>{b.text}</p>
-                      <div className="mt-1">
-                        <EvidenceChips ids={b.evidence} docs={evidence} />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            ) : (
-              <EmptyState title="No brief for this reporting week yet">
-                {report
-                  ? `The latest brief covers ${report.metrics.current.label}. `
-                  : "No brief has been generated yet. "}
-                The numbers on this page are live. {admin ? "Use “Generate brief” to write one from the stored data (about a minute)." : "An admin can generate one; the Friday schedule does it automatically."}
-              </EmptyState>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {hasData && (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <Card>
-            <CardHeader
-              title="Top recurring pain points"
-              description="Ranked by signal score. Counts are unique relevant discussions in sources collected for both weeks."
-              actions={<ButtonLink href="/pain-points" size="sm">All pain points</ButtonLink>}
-            />
-            {pp.length ? (
-              <PainPointTable rows={pp.slice(0, 8)} decisions={decisions} compact previousLabel={m.previous.label} />
-            ) : (
-              <CardBody>
-                <EmptyState title="No pain points identified yet">
-                  {m.totals.current.pending > 0 ? "Discussions are stored but not analysed yet. The next run (or Retry) analyses them." : "Nothing relevant has been classified for these two weeks."}
-                </EmptyState>
-              </CardBody>
-            )}
-          </Card>
-
-          <div className="space-y-6">
-            <Card>
-              <CardHeader title="Growing" description="≥ 2 more discussions and ≥ 25% vs last week" />
-              <CardBody>
-                <ChangeList items={growing} empty={m.quality.sufficientForTrend ? "Nothing grew meaningfully this week." : "Not enough data to call growth yet."} />
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader title="New this week" description="Not seen in the previous week — no % (zero baseline)" />
-              <CardBody>
-                <ChangeList items={emerging} empty="No new pain points this week." />
-              </CardBody>
-            </Card>
-            <Card>
-              <CardHeader title="Fading" description="Declining, or seen last week but not this week" />
-              <CardBody>
-                <ChangeList items={declining} empty="Nothing declined meaningfully." />
-              </CardBody>
-            </Card>
-          </div>
-        </div>
-      )}
-
-      {hasData && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader title="Still unresolved" description="Pain points where most of this week's discussions show no working fix (AI judgement per discussion, counted by code)." />
-            <CardBody>
-              {unresolved.length ? (
-                <ul className="space-y-3">
-                  {unresolved.map((p) => (
-                    <li key={p.painPointId} className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/pain-points/${p.painPointId}`} className="text-sm font-medium hover:underline">
-                          {p.title}
-                        </Link>
-                        <p className="text-xs text-text-3">
-                          {p.unresolvedCurrent} of {p.current} unresolved
-                          {p.dissatisfiedCurrent > 0 && ` · ${p.dissatisfiedCurrent} criticise existing tools`}
-                        </p>
-                      </div>
-                      <TrendBadge status={p.status} />
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-text-3">No pain point has 2+ discussions with a majority unresolved this week.</p>
-              )}
-              <Link href="/opportunities" className="mt-4 inline-block text-xs text-accent-text hover:underline">
-                See opportunity hypotheses →
+            <p className="mt-3 max-w-3xl text-[19px] leading-[27px] font-semibold tracking-[-0.015em] text-ink sm:text-[22px] sm:leading-[30px]">{brief.headline}</p>
+            <ol className="mt-6 grid gap-6 md:grid-cols-3 md:gap-8">
+              {brief.executive_summary.slice(0, 3).map((b, i) => (
+                <li key={i} className="min-w-0">
+                  <span className="tabular text-[12px] font-medium text-ink-3">0{i + 1}</span>
+                  <p className="mt-1 text-[14px] leading-[22px] text-ink-2">{b.text}</p>
+                  <EvidenceLinks ids={b.evidence} docs={evidence} max={2} />
+                </li>
+              ))}
+            </ol>
+            <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-line pt-4 text-[13px]">
+              <Link href={`/reports/${report!.id}`} className="inline-flex items-center gap-1 font-medium text-accent-ink hover:underline">
+                Read the full weekly brief <ArrowRight className="size-3.5" aria-hidden />
               </Link>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title={
-                <span className="inline-flex items-center gap-2">
-                  Recommended next actions <AiBadge />
-                </span>
-              }
-              description="From the brief. Click a source chip to verify the evidence."
-            />
-            <CardBody>
-              {brief?.recommendations.length ? (
-                <ol className="space-y-3">
-                  {brief.recommendations.slice(0, 4).map((r, i) => (
-                    <li key={i}>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium">{r.title}</span>
-                        <Badge>{r.kind}</Badge>
-                        <Badge tone={r.priority === "now" ? "accent" : "neutral"}>{r.priority}</Badge>
-                      </div>
-                      <p className="mt-0.5 text-xs text-text-2">{r.rationale}</p>
-                      <div className="mt-1">
-                        <EvidenceChips ids={r.evidence} docs={evidence} max={2} />
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <p className="text-sm text-text-3">Recommendations appear once a brief exists for this week.</p>
-              )}
-            </CardBody>
-          </Card>
-        </div>
-      )}
-
-      {hasData && (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card>
-            <CardHeader title="Discussion volume by week" description={`Unique discussions per reporting week (Fri–Thu ${TZ_LABEL}), by source. Hatched = week in progress.`} />
-            <CardBody>
-              <VolumeChart data={m.series} />
-            </CardBody>
-          </Card>
-          <Card>
-            <CardHeader title="Most discussed topics" description="Relevant discussions per topic, this week vs previous (comparable sources)." />
-            <CardBody>
-              {m.topics.some((t) => t.current + t.previous > 0) ? (
-                <TopicCompareChart
-                  data={m.topics.filter((t) => t.current + t.previous > 0).map((t) => ({ name: t.name, current: t.current, previous: t.previous }))}
-                  currentLabel={m.current.label}
-                  previousLabel={m.previous.label}
-                />
-              ) : (
-                <p className="text-sm text-text-3">No relevant discussions classified yet.</p>
-              )}
-            </CardBody>
-          </Card>
-        </div>
-      )}
-
-      {hasData && (
-        <Card>
-          <CardHeader
-            title="Sources and coverage"
-            description={`Week-on-week comparisons use: ${m.comparableSources.map(sourceLabel).join(", ") || "none yet"}.`}
-            actions={<ButtonLink href="/health" size="sm">Data health</ButtonLink>}
-          />
-          <div className="overflow-x-auto">
-            <table className="tabular w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs text-text-3">
-                  <th className="px-4 py-2 font-medium">Source</th>
-                  <th className="px-4 py-2 text-right font-medium">This week</th>
-                  <th className="px-4 py-2 text-right font-medium">Relevant</th>
-                  <th className="px-4 py-2 text-right font-medium">Previous</th>
-                  <th className="w-1/3 px-4 py-2 font-medium">Share of this week</th>
-                </tr>
-              </thead>
-              <tbody>
-                {m.sources.map((s) => (
-                  <tr key={s.sourceId} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2">
-                      <SourceBadge source={s.sourceId} />
-                      {!m.comparableSources.includes(s.sourceId) && <span className="ml-2 text-xs text-warn">not in comparison</span>}
-                    </td>
-                    <td className="px-4 py-2 text-right">{s.current}</td>
-                    <td className="px-4 py-2 text-right">{s.relevantCurrent}</td>
-                    <td className="px-4 py-2 text-right text-text-2">
-                      {s.previous} <span className="text-xs text-text-3">({fmtSigned(s.current - s.previous)})</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <MiniBar value={s.current} max={maxSource} color={sourceColorVar(s.sourceId)} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <span className="text-ink-3">Generated {fmtRelative(report!.completed_at)} · all counts are computed from stored discussions</span>
+            </div>
+          </>
+        ) : (
+          <div className="mt-3 max-w-2xl">
+            <p className="text-[18px] leading-7 font-semibold text-ink">No brief has been written for this week yet.</p>
+            <p className="mt-1.5 text-[14px] leading-6 text-ink-2">
+              {report ? `The latest brief covers ${report.metrics.current.label}. ` : ""}
+              The numbers below are live.{" "}
+              {admin ? "Use “Generate brief” to write this week’s summary from the stored discussions (about a minute)." : "A new brief is written automatically every Friday at 08:00 IST."}
+            </p>
+            {report && (
+              <Link href={`/reports/${report.id}`} className="mt-3 inline-flex items-center gap-1 text-[13px] font-medium text-accent-ink hover:underline">
+                <FileText className="size-3.5" aria-hidden /> Open the latest brief
+              </Link>
+            )}
           </div>
-        </Card>
-      )}
+        )}
+
+        {notes.length > 0 && (
+          <details className="mt-5 text-[13px]">
+            <summary className="cursor-pointer text-ink-3 marker:text-ink-3 hover:text-ink-2">
+              About this week’s data — {notes.length} note{notes.length > 1 ? "s" : ""} on coverage and comparability
+            </summary>
+            <ul className="mt-2 grid list-disc gap-1.5 pl-5 text-ink-2">
+              {notes.map((n) => (
+                <li key={n}>{n}</li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </section>
+
+      {/* 2 — How big */}
+      <section aria-label="Key numbers" className="grid grid-cols-1 gap-x-8 gap-y-8 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr] lg:divide-x lg:divide-line">
+        <Metric
+          emphasis
+          label="Relevant discussions"
+          value={m.totals.current.relevant}
+          comparison={<span className="tabular">{m.totals.previous.relevant} the week before</span>}
+          explanation={`Posts describing a real developer problem in your space, out of ${m.totals.current.unique} collected this week.`}
+          tip="Gemini Flash reads every collected post and keeps only those describing a code review, CI/CD or workflow problem. Open any discussion to see why it was kept."
+        />
+        <div className="lg:pl-8">
+          <Metric
+            label="Distinct pain points"
+            value={m.totals.current.painPoints}
+            comparison={<span className="tabular">{m.groups.new.length} newly observed</span>}
+            explanation="Different problems raised this week. Different wordings of the same problem count once."
+          />
+        </div>
+        <div className="lg:pl-8">
+          <Metric
+            label="Growing issues"
+            value={m.quality.sufficientForTrend ? m.groups.growing.length : "—"}
+            comparison={m.quality.sufficientForTrend ? <span className="tabular">{m.groups.declining.length} declining</span> : <span>Too early to tell</span>}
+            explanation="Problems up by at least 2 discussions and 25% versus last week."
+            tip="Only counted when both weeks have enough comparable data. Small moves such as 1 → 2 are never called growth."
+          />
+        </div>
+        <div className="lg:pl-8">
+          <Metric
+            label="New opportunities"
+            value={brief ? brief.opportunities.length : "—"}
+            comparison={
+              brief ? (
+                <Link href="/opportunities" className="text-accent-ink hover:underline">
+                  Review hypotheses
+                </Link>
+              ) : (
+                <span>No brief yet</span>
+              )
+            }
+            explanation="Product hypotheses from this week’s brief, each with an experiment to validate it."
+          />
+        </div>
+      </section>
+
+      {/* 3 — What needs attention */}
+      <Section
+        title="What needs attention"
+        description="The three most important problems this week — ranked by how often, how widely, how unresolved and how fast they are moving."
+        actions={
+          <ButtonLink href="/pain-points" size="sm" variant="ghost">
+            All pain points <ArrowRight className="size-3.5" aria-hidden />
+          </ButtonLink>
+        }
+      >
+        {attention.length ? (
+          <ol className="divide-y divide-line border-y border-line">
+            {attention.map((p, i) => (
+              <li key={p.painPointId}>
+                <Link href={`/pain-points/${p.painPointId}`} className="group grid gap-2 py-5 sm:grid-cols-[2rem_1fr_auto] sm:items-start sm:gap-5">
+                  <span className="tabular text-[22px] leading-7 font-semibold text-line-strong transition-colors group-hover:text-accent">{i + 1}</span>
+                  <div className="min-w-0">
+                    <p className="text-[16px] leading-6 font-semibold text-ink transition-colors group-hover:text-accent-ink">{p.title}</p>
+                    {descriptions.get(p.painPointId) && <p className="mt-1 line-clamp-2 text-[14px] leading-[22px] text-ink-2">{descriptions.get(p.painPointId)}</p>}
+                    <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-ink-3">
+                      <span className="tabular font-medium text-ink-2">
+                        {p.current} discussion{p.current === 1 ? "" : "s"}
+                      </span>
+                      <span className="tabular">{changeText(p.current, p.previous, p.status)}</span>
+                      <TrendBadge status={p.status} />
+                      <EvidenceMeter discussions={p.current + p.previous} sources={p.sourcesAll.length} />
+                    </div>
+                  </div>
+                  <span className="hidden items-center gap-1 self-center text-[13px] font-medium text-ink-3 transition-colors group-hover:text-accent-ink sm:inline-flex">
+                    Inspect <ArrowRight className="size-3.5" aria-hidden />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <EmptyState title="No pain points identified this week">
+            {m.totals.current.pending > 0 ? "Some discussions are still waiting for analysis; the next collection finishes them." : "Nothing relevant was classified for this week."}
+          </EmptyState>
+        )}
+      </Section>
+
+      <div className="grid grid-cols-1 gap-14 lg:grid-cols-2 lg:gap-12">
+        {/* 4 — What is moving */}
+        <Section
+          title="Topic movement"
+          description={
+            m.comparableSources.length
+              ? `Relevant discussions per monitored topic, from ${m.comparableSources.map(sourceLabel).join(" and ")} — the sources collected in full for both weeks.`
+              : "No source was collected in full for both weeks yet, so topics cannot be compared."
+          }
+        >
+          {topics.length ? (
+            <>
+              <div className="mb-4 flex items-center gap-4 text-[12px] text-ink-3" aria-hidden>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-4 rounded-full bg-[var(--bar-current)]" /> This week
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-1.5 w-4 rounded-full bg-[var(--bar-previous)]" /> Last week
+                </span>
+              </div>
+              <ul className="grid gap-4">
+                {topics.map((t) => (
+                  <li key={t.topicId} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1.5">
+                    <span className="truncate text-[14px] text-ink">{t.name}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="tabular text-[13px] text-ink-2" aria-label={`${t.current} this week, ${t.previous} last week`}>
+                        {t.current} <span className="text-ink-3">/ {t.previous}</span>
+                      </span>
+                      <TrendBadge status={t.status} />
+                    </span>
+                    <div className="col-span-2">
+                      <PairBar current={t.current} previous={t.previous} max={topicMax} />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="text-[14px] text-ink-3">No comparable topic data yet.</p>
+          )}
+        </Section>
+
+        {/* 5 — What to do */}
+        <Section title="Recommended next actions" description="What the brief suggests doing next, and why. Each action links to the discussions behind it.">
+          {brief?.recommendations.length ? (
+            <ol className="grid gap-6">
+              {brief.recommendations.slice(0, 4).map((r, i) => (
+                <li key={i} className="grid grid-cols-[1.5rem_1fr] gap-3">
+                  <span className={cx("mt-0.5 flex size-6 items-center justify-center rounded-full text-[12px] font-semibold", r.priority === "now" ? "bg-accent text-white" : "bg-sunken text-ink-2")}>
+                    {i + 1}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-[15px] leading-[22px] font-semibold text-ink">{r.title}</p>
+                    <p className="mt-0.5 text-[12px] text-ink-3">
+                      {r.priority === "now" ? "Do now" : r.priority === "next" ? "Do next" : "Later"} · {r.kind}
+                    </p>
+                    <p className="mt-1.5 text-[14px] leading-[22px] text-ink-2">
+                      <span className="font-medium text-ink">Why: </span>
+                      {r.rationale}
+                    </p>
+                    <EvidenceLinks ids={r.evidence} docs={evidence} max={2} />
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <EmptyState title="No recommendations yet">Recommendations appear once this week’s brief has been written.</EmptyState>
+          )}
+        </Section>
+      </div>
+
+      <Divider />
+
+      {/* 6 — Can I trust it */}
+      <Section
+        title="Sources"
+        description={`Last successful collection ${lastGoodRun ? `${fmtRelative(lastGoodRun.finished_at)} (${fmtDateTime(lastGoodRun.finished_at)})` : "never"}. ${m.quality.sufficientForTrend ? "This week has enough comparable data for trends." : "This week has too little comparable data for reliable trends."}`}
+        actions={
+          <ButtonLink href="/health" size="sm" variant="ghost">
+            Sources & Data Health <ArrowRight className="size-3.5" aria-hidden />
+          </ButtonLink>
+        }
+      >
+        <ul className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+          {sources.map((s) => {
+            const tone = !s.is_enabled || !s.latest ? "idle" : s.latest.status === "succeeded" ? "ok" : s.latest.status === "failed" ? "bad" : "warn";
+            const stat = m.sources.find((x) => x.sourceId === s.id);
+            const text = !s.is_enabled
+              ? "Disabled"
+              : !s.latest
+                ? "Not collected yet"
+                : s.latest.status === "succeeded"
+                  ? s.latest.truncated
+                    ? "Working · sampled"
+                    : "Working"
+                  : s.latest.status === "partial"
+                    ? "Partly working"
+                    : "Failed last time";
+            return (
+              <li key={s.id} className="min-w-0">
+                <div className="flex items-center gap-2 text-[14px] font-medium text-ink">
+                  <StatusDot tone={tone} />
+                  <SourceTag source={s.id} />
+                </div>
+                <p className="mt-0.5 pl-4 text-[13px] text-ink-3">
+                  {text}
+                  {stat ? ` · ${stat.relevantCurrent} relevant this week` : ""}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      </Section>
     </div>
   );
 }

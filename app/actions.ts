@@ -93,7 +93,8 @@ function parseKeywordList(raw: string): string[] {
 }
 
 function refreshConfigPages() {
-  revalidatePath("/settings");
+  revalidatePath("/topics");
+  revalidatePath("/health");
   revalidatePath("/", "layout");
 }
 
@@ -105,7 +106,7 @@ export async function createTopicAction(_prev: ActionResult, form: FormData) {
     if (!keywords.length) throw new UserError("Add at least one keyword so the topic can be monitored.");
     await createTopic({ name, description: description || null, keywords });
     refreshConfigPages();
-    return `Created “${name}” with ${keywords.length} keyword${keywords.length === 1 ? "" : "s"}. It will be used from the next collection run.`;
+    return `Created “${name}” with ${keywords.length} keyword${keywords.length === 1 ? "" : "s"}. The next collection will include it.`;
   });
 }
 
@@ -183,7 +184,6 @@ export async function setSourceEnabledAction(id: string, enabled: boolean) {
   return guarded("setSourceEnabled", async () => {
     await setSourceEnabled(z.enum(["hackernews", "github", "stackoverflow", "devto"]).parse(id), enabled);
     refreshConfigPages();
-    revalidatePath("/health");
     return enabled ? "Source enabled for the next run." : "Source disabled for the next run.";
   });
 }
@@ -214,7 +214,7 @@ export async function addDecisionAction(_prev: ActionResult, form: FormData) {
     await addDecision({ painPointId, decision, rationale: rationale || null, reportId });
     revalidatePath(`/pain-points/${painPointId}`);
     revalidatePath("/pain-points");
-    revalidatePath("/decisions");
+    revalidatePath("/opportunities", "layout");
     return "Decision recorded.";
   });
 }

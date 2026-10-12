@@ -1,58 +1,121 @@
+// Pain Points — every recurring developer problem, as an understandable problem.
+
 import type { Metadata } from "next";
+import Link from "next/link";
 import { connection } from "next/server";
-import { PainPointTable, SIGNAL_HELP } from "@/components/PainPointTable";
-import { Callout, Card, CardHeader, CardBody, EmptyState, ErrorPanel, PageHeader } from "@/components/ui";
+import { DECISION_LABEL, PainPointList, PRIORITY_HELP } from "@/components/PainPointList";
+import { Badge, cx, EmptyState, ErrorPanel, PageHeader, Section } from "@/components/ui";
 import { SIGNAL_WEIGHTS } from "@/lib/analytics/metrics";
+import { listDecisions } from "@/lib/db/painPoints";
 import { safeLoad } from "@/lib/db/safe";
-import { TZ_LABEL } from "@/lib/format";
+import { fmtDateTime, TZ_LABEL } from "@/lib/format";
 import { loadOverview } from "@/lib/views/overview";
 
-export const metadata: Metadata = { title: "Pain points" };
+export const metadata: Metadata = { title: "Pain Points" };
 
-export default async function PainPointsPage() {
+const VIEWS = [
+  { key: "all", label: "All" },
+  { key: "growing", label: "Growing" },
+  { key: "new", label: "Newly observed" },
+  { key: "unresolved", label: "Mostly unresolved" },
+  { key: "decided", label: "With a decision" },
+] as const;
+
+export default async function PainPointsPage(props: PageProps<"/pain-points">) {
   await connection();
-  const loaded = await safeLoad(loadOverview);
+  const sp = await props.searchParams;
+  const view = (VIEWS.find((v) => v.key === sp.view)?.key ?? "all") as (typeof VIEWS)[number]["key"];
+  const loaded = await safeLoad(async () => ({ overview: await loadOverview(), log: await listDecisions() }));
   if (!loaded.ok) return <ErrorPanel title="Could not load pain points" error={loaded.error} />;
-  const { metrics: m, decisions } = loaded.data;
+  const { overview, log } = loaded.data;
+  const { metrics: m, decisions, descriptions } = overview;
+
+  const rows = m.painPoints.filter((p) => {
+    if (view === "growing") return p.status === "growing";
+    if (view === "new") return p.status === "new";
+    if (view === "unresolved") return p.current >= 2 && p.unresolvedCurrent / p.current >= 0.5;
+    if (view === "decided") return decisions.has(p.painPointId);
+    return true;
+  });
+  const count = (k: (typeof VIEWS)[number]["key"]) =>
+    k === "all" ? m.painPoints.length : k === "growing" ? m.groups.growing.length : k === "new" ? m.groups.new.length : k === "decided" ? m.painPoints.filter((p) => decisions.has(p.painPointId)).length : m.painPoints.filter((p) => p.current >= 2 && p.unresolvedCurrent / p.current >= 0.5).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-12">
       <PageHeader
-        eyebrow={`Week ${m.current.label} vs ${m.previous.label} (${TZ_LABEL})`}
-        title="Pain point intelligence"
-        description="Canonical developer problems, grouped semantically by Gemini Flash so that different wordings of the same problem count once. All counts, changes and scores are computed by code from stored discussions."
+        title="Pain Points"
+        description="The recurring problems developers describe. Gemini groups different wordings of the same problem so each is counted once; all counts, changes and priorities are calculated from the stored discussions."
+        meta={
+          <>
+            <span>
+              Week of {m.current.label} vs {m.previous.label} · {TZ_LABEL}
+            </span>
+            <span>{m.painPoints.length} active in the last two weeks</span>
+          </>
+        }
       />
-      {!m.quality.sufficientForTrend && (
-        <Callout tone="warn" title="Small sample">
-          {m.quality.warnings[m.quality.warnings.length - 1]}
-        </Callout>
-      )}
-      <Card>
-        <CardHeader title={`${m.painPoints.length} pain points active in the last two weeks`} description="Click a pain point for its evidence, AI analysis and your decision log." />
-        {m.painPoints.length ? (
-          <PainPointTable rows={m.painPoints} decisions={decisions} previousLabel={m.previous.label} />
+
+      <Section title="Problems, by priority" description={!m.quality.sufficientForTrend ? "This week has little comparable data, so most trends read “Too early to tell”." : undefined}>
+        <nav aria-label="Filter pain points" className="mb-5 flex flex-wrap gap-1.5">
+          {VIEWS.map((v) => (
+            <Link
+              key={v.key}
+              href={v.key === "all" ? "/pain-points" : `/pain-points?view=${v.key}`}
+              aria-current={view === v.key ? "page" : undefined}
+              className={cx(
+                "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors",
+                view === v.key ? "border-ink bg-ink text-white" : "border-line-strong bg-panel text-ink-2 hover:border-ink-3 hover:text-ink",
+              )}
+            >
+              {v.label}
+              <span className={cx("tabular text-[12px]", view === v.key ? "text-white/70" : "text-ink-3")}>{count(v.key)}</span>
+            </Link>
+          ))}
+        </nav>
+        {rows.length ? (
+          <PainPointList rows={rows} descriptions={descriptions} decisions={decisions} />
         ) : (
-          <CardBody>
-            <EmptyState title="No pain points yet">Run a collection; pain points appear once discussions are analysed.</EmptyState>
-          </CardBody>
+          <EmptyState title="Nothing in this view">
+            {view === "growing" && !m.quality.sufficientForTrend ? "There is not enough comparable data to call anything growing yet." : "No pain point matches this filter this week."}
+          </EmptyState>
         )}
-      </Card>
-      <Card>
-        <CardHeader title="How the signal score works" description="A transparent heuristic to separate signal from noise — not a validated statistical model." />
-        <CardBody className="space-y-2 text-sm text-text-2">
-          <p>{SIGNAL_HELP}</p>
-          <ul className="grid gap-1 sm:grid-cols-2">
-            {Object.entries(SIGNAL_WEIGHTS).map(([k, w]) => (
-              <li key={k} className="tabular">
-                <span className="text-text">{Math.round(w * 100)}%</span> {k}
+        <details className="mt-6 text-[13px] text-ink-2">
+          <summary className="cursor-pointer text-ink-3 hover:text-ink-2">How priority is calculated</summary>
+          <div className="mt-2 max-w-3xl space-y-2">
+            <p>{PRIORITY_HELP}</p>
+            <p className="tabular text-ink-3">
+              Weights: {Object.entries(SIGNAL_WEIGHTS).map(([k, w]) => `${k} ${Math.round(w * 100)}%`).join(" · ")}. Trend labels need at least 4 discussions across both weeks and a move of at least 2 discussions and 25%.
+            </p>
+          </div>
+        </details>
+      </Section>
+
+      <Section id="decisions" title="Decision log" description="Decisions you recorded on pain points — kept as a history and never generated by AI.">
+        {log.length === 0 ? (
+          <EmptyState title="No decisions yet">Open a pain point and choose Investigate, Validate, Add to backlog, Monitor or Dismiss.</EmptyState>
+        ) : (
+          <ul className="divide-y divide-line border-y border-line">
+            {log.slice(0, 30).map((d) => (
+              <li key={d.id} className="grid gap-1 py-3.5 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-baseline sm:gap-4">
+                <Badge tone="accent" className="w-fit">
+                  {DECISION_LABEL[d.decision]}
+                </Badge>
+                <div className="min-w-0">
+                  {d.pain_point ? (
+                    <Link href={`/pain-points/${d.pain_point.id}`} className="text-[14px] font-medium text-ink hover:text-accent-ink">
+                      {d.pain_point.title}
+                    </Link>
+                  ) : (
+                    <span className="text-ink-3">Removed pain point</span>
+                  )}
+                  {d.rationale && <p className="mt-0.5 text-[13px] text-ink-2">{d.rationale}</p>}
+                </div>
+                <span className="text-[12px] text-ink-3">{fmtDateTime(d.created_at)}</span>
               </li>
             ))}
           </ul>
-          <p className="text-xs text-text-3">
-            Trend labels need at least 4 discussions across both weeks and a move of ≥ 2 discussions and ≥ 25%. When the previous week is 0 no percentage is shown.
-          </p>
-        </CardBody>
-      </Card>
+        )}
+      </Section>
     </div>
   );
 }

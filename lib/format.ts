@@ -71,23 +71,28 @@ export const sourceColorVar = (id: string) => {
 };
 
 export const TREND_LABELS: Record<TrendStatus, string> = {
-  new: "New",
+  new: "Newly observed",
   growing: "Growing",
   stable: "Stable",
   declining: "Declining",
-  gone: "Not seen",
-  insufficient_data: "Too few to call",
+  gone: "Not seen this week",
+  insufficient_data: "Too early to tell",
 };
 
 export const TREND_HELP: Record<TrendStatus, string> = {
-  new: "Seen this week, not in the previous week. No percentage: the baseline is zero.",
+  new: "Seen this week but not in the previous week, so no percentage is shown (zero baseline). It may have appeared earlier — check “first observed”.",
   growing: "Up by at least 2 discussions and 25% versus the previous week.",
   stable: "Change smaller than 2 discussions or 25%.",
   declining: "Down by at least 2 discussions and 25% versus the previous week.",
   gone: "Seen in the previous week, not this week.",
-  insufficient_data: "Fewer than 4 discussions across both weeks — too few to call a trend.",
+  insufficient_data: "Fewer than 4 discussions across both weeks — too few to call a trend either way.",
 };
 
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** "2 Oct – 8 Oct 2026" from a half-open [start, end) period (end is exclusive). */
+export function fmtPeriod(start: string, end: string): string {
+  return `${fmtDate(start)} – ${fmtDate(new Date(new Date(end).getTime() - 1).toISOString(), { year: true })}`;
 }

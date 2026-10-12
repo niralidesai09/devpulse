@@ -17,10 +17,12 @@ function watch(page: Page) {
 test("overview loads with real numbers and labelled sections @responsive", async ({ page }) => {
   const problems = watch(page);
   await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("What developers are saying");
-  await expect(page.getByText(/Reporting week/)).toBeVisible();
-  await expect(page.getByText(/^Unique discussions/).first()).toBeVisible();
-  await expect(page.getByText(/Last successful collection/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Developer Pulse");
+  await expect(page.getByText(/^Week of/).first()).toBeVisible();
+  await expect(page.getByText("The week in developer conversations")).toBeVisible();
+  await expect(page.getByText(/^Relevant discussions/).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What needs attention" })).toBeVisible();
+  await expect(page.getByText(/^Updated /).first()).toBeVisible();
   // No horizontal page scroll at any viewport.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
@@ -29,7 +31,7 @@ test("overview loads with real numbers and labelled sections @responsive", async
 
 test("every main page renders without server errors", async ({ page }) => {
   const problems = watch(page);
-  for (const path of ["/pain-points", "/opportunities", "/discussions", "/reports", "/decisions", "/health", "/settings", "/architecture", "/login"]) {
+  for (const path of ["/pain-points", "/opportunities", "/discussions", "/reports", "/topics", "/health", "/architecture", "/login", "/settings", "/decisions"]) {
     const res = await page.goto(path);
     expect(res?.status(), path).toBeLessThan(400);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -48,27 +50,32 @@ test("discussions have working, traceable source links", async ({ page }) => {
   const res = await page.request.get(href!, { failOnStatusCode: false, maxRedirects: 5 });
   expect([200, 301, 302, 403, 429]).toContain(res.status()); // 403/429 = source rate-limits bots, link still exists
   // Detail page separates author text from AI interpretation.
-  await page.locator("main li").first().getByRole("link", { name: "Details" }).click();
+  await page.locator("main li").first().getByRole("link", { name: /Details/ }).first().click();
   await expect(page.getByText("What the author wrote")).toBeVisible();
-  await expect(page.getByText("Model interpretation")).toBeVisible();
+  await expect(page.getByText("Gemini’s interpretation")).toBeVisible();
 });
 
 test("explorer filters are applied through the URL", async ({ page }) => {
   await page.goto("/discussions");
   await page.locator("select[name=source]").selectOption("hackernews");
-  await page.getByRole("button", { name: "Apply filters" }).click();
+  await page.getByRole("button", { name: "Apply" }).click();
   await expect(page).toHaveURL(/source=hackernews/);
   const badges = page.locator("main li").filter({ hasText: "GitHub Issues" });
   expect(await badges.count()).toBe(0);
+  // search narrows results and the count is shown
+  await page.getByRole("searchbox").or(page.getByPlaceholder(/Search/)).first().fill("flaky");
+  await page.getByRole("button", { name: "Search" }).click();
+  await expect(page).toHaveURL(/q=flaky/);
+  await expect(page.getByText(/discussions?$/).first()).toBeVisible();
 });
 
 test("reports list and a previous report are accessible", async ({ page }) => {
   await page.goto("/reports");
-  const open = page.getByRole("link", { name: "Open" }).first();
+  const open = page.locator("main a[href^='/reports/']").first();
   test.skip((await open.count()) === 0, "No reports yet");
   await open.click();
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Developer Community Pulse");
-  await expect(page.getByText("Data coverage, caveats and confidence")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Developer Pulse — week of");
+  await expect(page.getByRole("heading", { name: "Data coverage and limitations" })).toBeVisible();
   const md = await page.request.get(page.url().replace("/reports/", "/api/reports/") + "/export?format=md");
   expect(md.status()).toBe(200);
   expect(await md.text()).toContain("# Developer Community Pulse");
@@ -98,7 +105,7 @@ test.describe("admin flows", () => {
     await page.goto("/login");
     await page.getByLabel("Passcode").fill(PASS!);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await expect(page.getByText("Admin", { exact: true })).toBeVisible();
+    await expect(page.getByText("Signed in as admin").first()).toBeVisible();
   });
 
   test("a wrong passcode is rejected", async ({ browser }) => {
@@ -113,11 +120,11 @@ test.describe("admin flows", () => {
 
   test("topics and keywords can be created, edited and removed", async ({ page }) => {
     const name = `E2E topic ${Date.now()}`;
-    await page.goto("/settings");
+    await page.goto("/topics");
     await page.getByLabel("Topic name").fill(name);
     await page.getByLabel(/^Keywords/).fill(`e2e keyword ${Date.now()}`);
     await page.getByRole("button", { name: "Create topic" }).click();
-    await expect(page.getByText(/Created “E2E topic/)).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: /Created “E2E topic/ })).toBeVisible();
     const card = page.locator("article").filter({ hasText: name });
     await card.getByLabel(`Add keywords to ${name}`).fill("e2e second keyword");
     await card.getByRole("button", { name: "Add" }).click();
@@ -125,12 +132,13 @@ test.describe("admin flows", () => {
     // duplicate keyword is rejected
     await card.getByLabel(`Add keywords to ${name}`).fill("E2E Second Keyword");
     await card.getByRole("button", { name: "Add" }).click();
-    await expect(card.getByText(/already monitored/)).toBeVisible();
-    // clean up: archive then delete
-    page.on("dialog", (d) => d.accept());
+    await expect(page.getByRole("alert").filter({ hasText: /already monitored/ })).toBeVisible();
+    // clean up: archive then delete, confirming in the in-app dialog
     await card.getByRole("button", { name: "Archive" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Archive topic" }).click();
     const archived = page.locator("article").filter({ hasText: name });
     await archived.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Delete permanently" }).click();
     await expect(page.locator("article").filter({ hasText: name })).toHaveCount(0);
   });
 
@@ -138,17 +146,48 @@ test.describe("admin flows", () => {
     test.skip(!process.env.E2E_TRIGGER_RUN, "Set E2E_TRIGGER_RUN=1 to start a real collection (uses API quota)");
     test.setTimeout(330_000);
     await page.goto("/health");
-    await page.getByRole("button", { name: "Run collection now" }).click();
-    await expect(page.getByText(/Collecting|Analysing|Writing|Starting/)).toBeVisible();
-    await expect(page.getByText(/Run finished|Run failed/)).toBeVisible({ timeout: 320_000 });
+    await page.getByRole("button", { name: "Collect now" }).click();
+    await expect(page.getByText(/Collecting|Analysing|Writing|Starting/).first()).toBeVisible();
+    await expect(page.getByText(/Collection finished|Collection failed/)).toBeVisible({ timeout: 320_000 });
   });
 });
 
 test("no page scrolls horizontally on a phone @responsive", async ({ page }) => {
-  for (const path of ["/", "/pain-points", "/opportunities", "/discussions", "/reports", "/decisions", "/health", "/settings", "/architecture"]) {
+  for (const path of ["/", "/pain-points", "/opportunities", "/opportunities/0", "/discussions", "/reports", "/topics", "/health", "/architecture"]) {
     await page.goto(path);
     await page.waitForLoadState("networkidle");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow, path).toBeLessThanOrEqual(1);
   }
+});
+
+test("pain point filters, detail and evidence trail work", async ({ page }) => {
+  await page.goto("/pain-points");
+  await page.getByRole("link", { name: /Newly observed/ }).first().click();
+  await expect(page).toHaveURL(/view=new/);
+  await page.goto("/pain-points");
+  await page.locator("main ul a[href^='/pain-points/']").first().click();
+  await expect(page.getByRole("heading", { name: "How often, and is it changing?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Next step" })).toBeVisible();
+  // every supporting discussion links to an original source
+  const originals = page.locator("main a[target=_blank]");
+  expect(await originals.count()).toBeGreaterThan(0);
+});
+
+test("opportunities list opens a detail with hypothesis and validation plan", async ({ page }) => {
+  await page.goto("/opportunities");
+  const first = page.locator("main a[href^='/opportunities/']").first();
+  test.skip((await first.count()) === 0, "No opportunities in the latest brief");
+  await first.click();
+  await expect(page.getByText("Hypothesis — needs validation")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "How to validate it" })).toBeVisible();
+});
+
+test("mobile navigation drawer opens and closes with Escape @responsive", async ({ page, isMobile }) => {
+  test.skip(!isMobile, "Drawer is only used on small screens");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Open navigation" }).click();
+  await expect(page.getByRole("dialog", { name: "Navigation" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Navigation" })).toHaveCount(0);
 });

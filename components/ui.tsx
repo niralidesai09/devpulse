@@ -1,121 +1,163 @@
-// Shared, server-safe UI primitives. One place for typography, spacing,
-// borders and states, so every page looks and behaves the same.
+// Design-system primitives (server-safe). Every page is built from these so
+// typography, spacing, colour and states stay consistent.
+// Tokens live in app/globals.css; rationale in docs/UX_REDESIGN.md.
 
+import { ArrowDownRight, ArrowUpRight, ExternalLink, Info, Minus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { TrendStatus } from "@/lib/analytics/metrics";
-import { isSafeHttpUrl } from "@/lib/text";
 import { sourceColorVar, sourceLabel, TREND_HELP, TREND_LABELS } from "@/lib/format";
+import { isSafeHttpUrl } from "@/lib/text";
 
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
 }
 
 // ---------------------------------------------------------------------
-// Layout
+// Page structure
 // ---------------------------------------------------------------------
 
 export function PageHeader({
   title,
   description,
   actions,
-  eyebrow,
+  meta,
+  back,
 }: {
-  title: string;
+  title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
-  eyebrow?: ReactNode;
+  meta?: ReactNode;
+  back?: { href: string; label: string };
 }) {
   return (
-    <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div className="min-w-0">
-        {eyebrow && <div className="mb-1 text-xs font-medium text-text-3">{eyebrow}</div>}
-        <h1 className="text-[22px] font-semibold tracking-tight text-text">{title}</h1>
-        {description && <p className="mt-1 max-w-3xl text-sm text-text-2">{description}</p>}
+    <header className="mb-10">
+      {back && (
+        <Link href={back.href} className="no-print mb-4 inline-flex items-center gap-1 text-[13px] text-ink-3 transition-colors hover:text-ink">
+          <span aria-hidden>←</span> {back.label}
+        </Link>
+      )}
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 max-w-3xl">
+          <h1 className="text-[28px] leading-[34px] font-semibold tracking-[-0.02em] text-ink">{title}</h1>
+          {description && <p className="mt-2 text-[15px] leading-6 text-ink-2">{description}</p>}
+          {meta && <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-ink-3">{meta}</div>}
+        </div>
+        {actions && <div className="no-print flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="no-print flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }
 
-export function Card({ children, className, as: As = "section" }: { children: ReactNode; className?: string; as?: "section" | "div" | "article" }) {
-  return <As className={cx("min-w-0 rounded-lg border border-border bg-surface shadow-[var(--shadow-sm)]", className)}>{children}</As>;
-}
-
-export function CardHeader({
+/** A titled region separated by whitespace — not a box. */
+export function Section({
   title,
   description,
   actions,
+  children,
+  className,
   id,
 }: {
   title: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  children: ReactNode;
+  className?: string;
   id?: string;
 }) {
   return (
-    <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0">
-        <h2 id={id} className="text-sm font-semibold text-text">
-          {title}
-        </h2>
-        {description && <p className="mt-0.5 text-xs text-text-3">{description}</p>}
+    <section className={cx("min-w-0", className)} aria-labelledby={id}>
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h2 id={id} className="text-[15px] leading-6 font-semibold text-ink">
+            {title}
+          </h2>
+          {description && <p className="mt-0.5 text-[13px] leading-5 text-ink-3">{description}</p>}
+        </div>
+        {actions && <div className="no-print flex shrink-0 items-center gap-2">{actions}</div>}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-    </div>
+      {children}
+    </section>
   );
 }
 
-export function CardBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx("p-4", className)}>{children}</div>;
+/** A quiet raised surface for grouped rows. Use sparingly. */
+export function Panel({ children, className, as: As = "div" }: { children: ReactNode; className?: string; as?: "div" | "section" | "article" | "ul" | "ol" }) {
+  return <As className={cx("min-w-0 rounded-[var(--radius-lg)] border border-line bg-panel", className)}>{children}</As>;
+}
+
+export function Divider({ className }: { className?: string }) {
+  return <hr className={cx("border-0 border-t border-line", className)} />;
 }
 
 // ---------------------------------------------------------------------
-// Stats
+// Metrics
 // ---------------------------------------------------------------------
 
-export function Stat({
+export function Metric({
   label,
   value,
-  hint,
-  sub,
+  explanation,
+  comparison,
+  tip,
+  emphasis = false,
 }: {
   label: string;
   value: ReactNode;
-  hint?: string;
-  sub?: ReactNode;
+  explanation: string;
+  comparison?: ReactNode;
+  tip?: string;
+  emphasis?: boolean;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-surface px-4 py-3 shadow-[var(--shadow-sm)]">
-      <div className="flex items-center gap-1 text-xs font-medium text-text-3">
+    <div className="min-w-0">
+      <div className="flex items-center gap-1.5 text-[13px] font-medium text-ink-2">
         {label}
-        {hint && <InfoTip text={hint} />}
+        {tip && <Tip text={tip} />}
       </div>
-      <div className="mt-1 text-2xl font-semibold tracking-tight text-text">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-text-3">{sub}</div>}
+      <div className={cx("tabular mt-1 font-semibold tracking-[-0.02em] text-ink", emphasis ? "text-[40px] leading-[44px]" : "text-[28px] leading-[34px]")}>{value}</div>
+      {comparison && <div className="mt-1 text-[13px] text-ink-2">{comparison}</div>}
+      <p className="mt-1 text-[12px] leading-[18px] text-ink-3">{explanation}</p>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------
-// Badges
+// Labels & badges
 // ---------------------------------------------------------------------
 
-type Tone = "neutral" | "accent" | "good" | "warn" | "bad" | "info";
+type Tone = "neutral" | "accent" | "up" | "down" | "bad" | "ok";
 const TONES: Record<Tone, string> = {
-  neutral: "bg-surface-2 text-text-2 border-border",
-  accent: "bg-accent-soft text-accent-text border-transparent",
-  good: "bg-good-soft text-good border-transparent",
-  warn: "bg-warn-soft text-warn border-transparent",
-  bad: "bg-bad-soft text-bad border-transparent",
-  info: "bg-info-soft text-info border-transparent",
+  neutral: "bg-sunken text-ink-2",
+  accent: "bg-accent-soft text-accent-ink",
+  up: "bg-up-soft text-up",
+  down: "bg-down-soft text-down",
+  bad: "bg-bad-soft text-bad",
+  ok: "bg-down-soft text-ok",
 };
 
-export function Badge({ children, tone = "neutral", title, className, wrap = false }: { children: ReactNode; tone?: Tone; title?: string; className?: string; wrap?: boolean }) {
+export function Badge({
+  children,
+  tone = "neutral",
+  title,
+  className,
+  wrap = false,
+}: {
+  children: ReactNode;
+  tone?: Tone;
+  title?: string;
+  className?: string;
+  wrap?: boolean;
+}) {
   return (
     <span
       title={title}
-      className={cx("inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-4", wrap ? "whitespace-normal text-left" : "whitespace-nowrap", TONES[tone], className)}
+      className={cx(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] leading-[18px] font-medium",
+        wrap ? "whitespace-normal" : "whitespace-nowrap",
+        TONES[tone],
+        className,
+      )}
     >
       {children}
     </span>
@@ -123,46 +165,73 @@ export function Badge({ children, tone = "neutral", title, className, wrap = fal
 }
 
 const TREND_TONE: Record<TrendStatus, Tone> = {
-  new: "info",
-  growing: "warn",
+  new: "accent",
+  growing: "up",
   stable: "neutral",
-  declining: "good",
+  declining: "down",
   gone: "neutral",
   insufficient_data: "neutral",
 };
-const TREND_ICON: Record<TrendStatus, string> = {
-  new: "✦",
-  growing: "▲",
-  stable: "→",
-  declining: "▼",
-  gone: "○",
-  insufficient_data: "·",
-};
 
-/** Trend label: icon + text + tooltip — never colour alone. Growing pain is "warn", fading pain is "good". */
+/** Trend label: icon + word + explanation on hover. Growing problems are amber, fading ones green. */
 export function TrendBadge({ status }: { status: TrendStatus }) {
+  const Icon = status === "growing" ? ArrowUpRight : status === "declining" ? ArrowDownRight : status === "new" ? Sparkles : Minus;
   return (
     <Badge tone={TREND_TONE[status]} title={TREND_HELP[status]}>
-      <span aria-hidden>{TREND_ICON[status]}</span>
+      <Icon aria-hidden className="size-3.5" strokeWidth={2} />
       {TREND_LABELS[status]}
     </Badge>
   );
 }
 
-export function SourceBadge({ source }: { source: string }) {
+export function SourceTag({ source }: { source: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-text-2">
-      <span aria-hidden className="size-2 rounded-full" style={{ background: sourceColorVar(source) }} />
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[12px] text-ink-2">
+      <span aria-hidden className="size-1.5 rounded-full" style={{ background: sourceColorVar(source) }} />
       {sourceLabel(source)}
     </span>
   );
 }
 
-export function AiBadge({ title = "Interpretation generated by Gemini Flash — not the author's words" }: { title?: string }) {
+/** Marks text written by the model, so facts and interpretation are never confused. */
+export function AiLabel({ children = "AI summary" }: { children?: ReactNode }) {
   return (
-    <Badge tone="accent" title={title}>
-      AI
-    </Badge>
+    <span className="inline-flex items-center gap-1 text-[12px] font-medium text-accent-ink" title="Written by Gemini Flash from stored discussions; every claim cites its evidence">
+      <Sparkles aria-hidden className="size-3.5" strokeWidth={2} />
+      {children}
+    </span>
+  );
+}
+
+export function StatusDot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
+  const color = { ok: "bg-ok", warn: "bg-up", bad: "bg-bad", idle: "bg-line-strong" }[tone];
+  return <span aria-hidden className={cx("inline-block size-2 shrink-0 rounded-full", color)} />;
+}
+
+export type EvidenceStrength = "Strong" | "Moderate" | "Limited";
+
+/** Evidence quality from independent discussions and source diversity — a simple stated rule, not a probability. */
+export function evidenceStrength(discussions: number, sources: number): EvidenceStrength {
+  if (discussions >= 6 && sources >= 2) return "Strong";
+  if (discussions >= 3) return "Moderate";
+  return "Limited";
+}
+
+export function EvidenceMeter({ discussions, sources }: { discussions: number; sources: number }) {
+  const s = evidenceStrength(discussions, sources);
+  const filled = s === "Strong" ? 3 : s === "Moderate" ? 2 : 1;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[12px] text-ink-3"
+      title={`${s} evidence: ${discussions} discussion${discussions === 1 ? "" : "s"} from ${sources} source${sources === 1 ? "" : "s"}. Strong = 6+ discussions from 2+ sources; Moderate = 3+.`}
+    >
+      <span aria-hidden className="flex gap-0.5">
+        {[1, 2, 3].map((i) => (
+          <span key={i} className={cx("h-2.5 w-1 rounded-full", i <= filled ? "bg-ink-2" : "bg-line-strong")} />
+        ))}
+      </span>
+      {s}
+    </span>
   );
 }
 
@@ -172,21 +241,31 @@ export function AiBadge({ title = "Interpretation generated by Gemini Flash — 
 
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 const BUTTON: Record<ButtonVariant, string> = {
-  primary: "bg-accent text-white hover:bg-accent-hover border-transparent",
-  secondary: "bg-surface text-text border-border-strong hover:bg-surface-2",
-  ghost: "bg-transparent text-text-2 border-transparent hover:bg-surface-2 hover:text-text",
-  danger: "bg-surface text-bad border-border-strong hover:bg-bad-soft",
+  primary: "bg-accent text-white hover:bg-accent-hover border-transparent shadow-[0_1px_0_rgba(0,0,0,0.04)]",
+  secondary: "bg-panel text-ink border-line-strong hover:bg-sunken",
+  ghost: "bg-transparent text-ink-2 border-transparent hover:bg-sunken hover:text-ink",
+  danger: "bg-panel text-bad border-line-strong hover:bg-bad-soft",
 };
 
 export function buttonClass(variant: ButtonVariant = "secondary", size: "sm" | "md" = "md") {
   return cx(
-    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-    size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-sm",
+    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[var(--radius)] border font-medium transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-50",
+    size === "sm" ? "h-8 px-3 text-[13px]" : "h-9 px-3.5 text-[14px]",
     BUTTON[variant],
   );
 }
 
-export function ButtonLink({ href, children, variant = "secondary", size = "md" }: { href: string; children: ReactNode; variant?: ButtonVariant; size?: "sm" | "md" }) {
+export function ButtonLink({
+  href,
+  children,
+  variant = "secondary",
+  size = "md",
+}: {
+  href: string;
+  children: ReactNode;
+  variant?: ButtonVariant;
+  size?: "sm" | "md";
+}) {
   return (
     <Link href={href} className={buttonClass(variant, size)}>
       {children}
@@ -195,39 +274,38 @@ export function ButtonLink({ href, children, variant = "secondary", size = "md" 
 }
 
 export const inputClass =
-  "h-8 w-full rounded-md border border-border-strong bg-surface px-2.5 text-sm text-text placeholder:text-text-3 focus:border-accent focus:outline-none";
+  "h-9 w-full rounded-[var(--radius)] border border-line-strong bg-panel px-3 text-[14px] text-ink placeholder:text-ink-3 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15";
+
+export const labelClass = "grid gap-1.5 text-[13px] font-medium text-ink-2";
 
 // ---------------------------------------------------------------------
 // States
 // ---------------------------------------------------------------------
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+export function EmptyState({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-2 rounded-md border border-dashed border-border-strong bg-surface-2/50 px-4 py-6">
-      <p className="text-sm font-medium text-text">{title}</p>
-      {children && <div className="max-w-2xl text-sm text-text-2">{children}</div>}
-      {action && <div className="mt-1">{action}</div>}
+    <div className="flex flex-col items-center rounded-[var(--radius-lg)] border border-dashed border-line-strong px-6 py-12 text-center">
+      {icon && <div className="mb-3 text-ink-3">{icon}</div>}
+      <p className="text-[15px] font-medium text-ink">{title}</p>
+      {children && <div className="mt-1.5 max-w-md text-[14px] leading-6 text-ink-2">{children}</div>}
+      {action && <div className="mt-5">{action}</div>}
     </div>
   );
 }
 
-export function Callout({ tone = "info", title, children }: { tone?: "info" | "warn" | "bad" | "good"; title?: string; children: ReactNode }) {
+export function Callout({ tone = "neutral", title, children }: { tone?: "neutral" | "up" | "bad" | "ok"; title?: ReactNode; children?: ReactNode }) {
   const styles = {
-    info: "border-info/25 bg-info-soft text-text",
-    warn: "border-warn/30 bg-warn-soft text-text",
-    bad: "border-bad/30 bg-bad-soft text-text",
-    good: "border-good/30 bg-good-soft text-text",
+    neutral: "border-line bg-sunken/60",
+    up: "border-up/20 bg-up-soft",
+    bad: "border-bad/20 bg-bad-soft",
+    ok: "border-down/20 bg-down-soft",
   }[tone];
-  const icon = { info: "i", warn: "!", bad: "×", good: "✓" }[tone];
-  const iconTone = { info: "bg-info", warn: "bg-warn", bad: "bg-bad", good: "bg-good" }[tone];
   return (
-    <div role={tone === "bad" ? "alert" : "status"} className={cx("flex gap-3 rounded-md border px-3 py-2.5 text-sm", styles)}>
-      <span aria-hidden className={cx("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white", iconTone)}>
-        {icon}
-      </span>
+    <div role={tone === "bad" ? "alert" : "status"} className={cx("flex gap-3 rounded-[var(--radius)] border px-4 py-3 text-[14px]", styles)}>
+      <Info aria-hidden className={cx("mt-0.5 size-4 shrink-0", tone === "bad" ? "text-bad" : tone === "up" ? "text-up" : tone === "ok" ? "text-ok" : "text-ink-3")} />
       <div className="min-w-0">
-        {title && <p className="font-medium">{title}</p>}
-        <div className="text-text-2">{children}</div>
+        {title && <p className="font-medium text-ink">{title}</p>}
+        {children && <div className={cx("text-ink-2", Boolean(title) && "mt-0.5")}>{children}</div>}
       </div>
     </div>
   );
@@ -243,22 +321,23 @@ export function ErrorPanel({ title = "Something went wrong", error, hint }: { ti
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded-md bg-surface-3", className)} />;
+  return <div className={cx("animate-pulse rounded-[var(--radius)] bg-sunken", className)} />;
 }
 
-export function PageSkeleton({ rows = 3 }: { rows?: number }) {
+export function PageSkeleton() {
   return (
-    <div aria-busy="true" aria-label="Loading" className="space-y-4">
-      <Skeleton className="h-7 w-64" />
-      <Skeleton className="h-4 w-96 max-w-full" />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div aria-busy="true" aria-label="Loading" className="space-y-10">
+      <div className="space-y-3">
+        <Skeleton className="h-8 w-72" />
+        <Skeleton className="h-4 w-[28rem] max-w-full" />
+      </div>
+      <Skeleton className="h-36" />
+      <div className="grid grid-cols-2 gap-8 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-20" />
         ))}
       </div>
-      {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-48" />
-      ))}
+      <Skeleton className="h-64" />
     </div>
   );
 }
@@ -267,63 +346,63 @@ export function PageSkeleton({ rows = 3 }: { rows?: number }) {
 // Small helpers
 // ---------------------------------------------------------------------
 
-/** Accessible hover/focus tooltip using the native title plus a visible "i". */
-export function InfoTip({ text }: { text: string }) {
+/** Accessible tooltip: shows on hover and keyboard focus. */
+export function Tip({ text, children }: { text: string; children?: ReactNode }) {
   return (
-    <span
-      tabIndex={0}
-      role="img"
-      aria-label={text}
-      title={text}
-      className="inline-flex size-3.5 cursor-help items-center justify-center rounded-full border border-border-strong text-[9px] font-semibold text-text-3"
-    >
-      i
+    <span className="group/tip relative inline-flex">
+      <span tabIndex={0} aria-label={text} className="inline-flex cursor-help items-center text-ink-3 hover:text-ink-2 focus:text-ink-2">
+        {children ?? <Info className="size-3.5" strokeWidth={2} aria-hidden />}
+      </span>
+      <span
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full left-1/2 z-40 mb-2 w-64 -translate-x-1/2 rounded-[var(--radius)] bg-ink px-3 py-2 text-[12px] leading-[18px] font-normal text-white opacity-0 shadow-[var(--shadow-pop)] transition-opacity duration-100 group-hover/tip:visible group-hover/tip:opacity-100 group-focus-within/tip:visible group-focus-within/tip:opacity-100"
+      >
+        {text}
+      </span>
     </span>
   );
 }
 
-/** External link to an original source — only http(s), opened safely. */
-export function SourceLink({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
+/** External link to an original source — http(s) only, opened safely, marked with an icon. */
+export function SourceLink({ href, children, className }: { href: string; children?: ReactNode; className?: string }) {
   if (!isSafeHttpUrl(href)) return <span className={className}>{children}</span>;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer nofollow" className={cx("hover:underline", className)}>
+    <a href={href} target="_blank" rel="noopener noreferrer nofollow" className={cx("group/link hover:text-accent-ink", className)}>
       {children}
-      <span aria-hidden className="ml-0.5 text-text-3">
-        ↗
-      </span>
-      <span className="sr-only"> (opens original source in a new tab)</span>
+      <ExternalLink aria-hidden className="ml-1 inline size-3.5 align-[-2px] text-ink-3 group-hover/link:text-accent-ink" />
+      <span className="sr-only"> (opens the original in a new tab)</span>
     </a>
   );
 }
 
-/** Tiny inline sparkline (SVG) for weekly counts. */
-export function Sparkline({ values, label }: { values: number[]; label: string }) {
-  const w = 64;
-  const h = 18;
-  const max = Math.max(1, ...values);
-  const step = values.length > 1 ? w / (values.length - 1) : w;
-  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${(h - 2 - (v / max) * (h - 4)).toFixed(1)}`).join(" ");
+/** Paired bars: this week vs last week, on a shared scale. */
+export function PairBar({ current, previous, max }: { current: number; previous: number; max: number }) {
+  const w = (n: number) => (max > 0 && n > 0 ? `${Math.max(3, (n / max) * 100)}%` : "0%");
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`${label}: ${values.join(", ")} per week`} className="overflow-visible">
-      <title>{`${label}: ${values.join(" → ")} (oldest → current week)`}</title>
-      <polyline points={pts} fill="none" stroke="var(--series-1)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      {values.length > 0 && (
-        <circle cx={(values.length - 1) * step} cy={h - 2 - (values[values.length - 1] / max) * (h - 4)} r={2} fill="var(--series-1)" />
-      )}
-    </svg>
-  );
-}
-
-/** Horizontal proportion bar (for tables). */
-export function MiniBar({ value, max, color = "var(--series-1)" }: { value: number; max: number; color?: string }) {
-  const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
-  return (
-    <div className="h-1.5 w-full rounded-full bg-surface-3" aria-hidden>
-      {value > 0 && <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color }} />}
+    <div className="grid gap-1" aria-hidden>
+      <div className="h-1.5 rounded-full bg-sunken">
+        <div className="h-1.5 rounded-full bg-[var(--bar-current)]" style={{ width: w(current) }} />
+      </div>
+      <div className="h-1.5 rounded-full bg-sunken">
+        <div className="h-1.5 rounded-full bg-[var(--bar-previous)]" style={{ width: w(previous) }} />
+      </div>
     </div>
   );
 }
 
-export function Kbd({ children }: { children: ReactNode }) {
-  return <kbd className="rounded border border-border-strong bg-surface-2 px-1 font-mono text-[11px]">{children}</kbd>;
+/** Tiny inline sparkline (weekly counts, oldest → newest). */
+export function Sparkline({ values, label }: { values: number[]; label: string }) {
+  const w = 56;
+  const h = 18;
+  const max = Math.max(1, ...values);
+  const step = values.length > 1 ? w / (values.length - 1) : w;
+  const y = (v: number) => (h - 2 - (v / max) * (h - 4)).toFixed(1);
+  const pts = values.map((v, i) => `${(i * step).toFixed(1)},${y(v)}`).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`${label}: ${values.join(", ")} per week`} className="overflow-visible">
+      <title>{`${values.join(" → ")} discussions per week (oldest → latest)`}</title>
+      <polyline points={pts} fill="none" stroke="var(--accent)" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      {values.length > 0 && <circle cx={(values.length - 1) * step} cy={y(values[values.length - 1])} r={2} fill="var(--accent)" />}
+    </svg>
+  );
 }

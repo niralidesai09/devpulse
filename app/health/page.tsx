@@ -1,23 +1,46 @@
-// Data health: what ran, what failed, what is stale. Makes the system debuggable and trustworthy.
+// Sources & Data Health — is collection working, and what to do when it is not.
 
+import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { RunControls } from "@/components/RunControls";
-import { Badge, Callout, Card, CardBody, CardHeader, EmptyState, ErrorPanel, PageHeader, SourceBadge, Stat } from "@/components/ui";
+import { SourceToggle } from "@/components/TopicEditor";
+import { Badge, Callout, cx, EmptyState, ErrorPanel, Metric, PageHeader, Section, SourceTag, StatusDot } from "@/components/ui";
 import { isGeminiConfigured } from "@/lib/ai/gemini";
 import { isAdmin } from "@/lib/auth";
 import { listSources } from "@/lib/db/config";
 import { countAnalysisQueue } from "@/lib/db/discussions";
 import { listRuns } from "@/lib/db/runs";
 import { safeLoad } from "@/lib/db/safe";
+import type { SourceRunRow } from "@/lib/db/types";
 import { isEmailConfigured } from "@/lib/email/sendBrief";
 import { fmtDateTime, fmtDuration, fmtRelative, sourceLabel } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Data health" };
+export const metadata: Metadata = { title: "Sources & Data Health" };
 
-const RUN_TONE = { succeeded: "good", partial: "warn", failed: "bad", running: "info" } as const;
-const SRC_TONE = { succeeded: "good", partial: "warn", failed: "bad", skipped: "neutral" } as const;
+const RUN_TONE = { succeeded: "ok", partial: "up", failed: "bad", running: "accent" } as const;
+const RUN_LABEL = { succeeded: "Succeeded", partial: "Finished with warnings", failed: "Failed", running: "Running" } as const;
+const RUN_SHORT = { succeeded: "Succeeded", partial: "Partial", failed: "Failed", running: "Running" } as const;
+
+/** Plain-language status and next step for a source's latest result. */
+function explain(s: SourceRunRow | undefined, enabled: boolean): { tone: "ok" | "warn" | "bad" | "idle"; status: string; next: string } {
+  if (!enabled) return { tone: "idle", status: "Disabled", next: "Turn it on to include it in the next collection." };
+  if (!s) return { tone: "idle", status: "Not collected yet", next: "It will be collected on the next run." };
+  const err = s.error ?? "";
+  if (s.status === "failed") {
+    if (/GITHUB_TOKEN/i.test(err)) return { tone: "bad", status: "Not configured", next: "Add a GITHUB_TOKEN environment variable on Vercel, then collect again." };
+    if (/rate limit|403|429/i.test(err)) return { tone: "bad", status: "Rate-limited", next: "The source asked us to slow down. Other sources were kept; it retries automatically next run." };
+    return { tone: "bad", status: "Failed", next: "Other sources were kept. Try “Collect now” later; if it keeps failing, check the error below." };
+  }
+  if (s.status === "partial") {
+    if (/rate limit|403|429/i.test(err)) return { tone: "warn", status: "Partly collected (rate-limited)", next: "Some searches were refused by the source’s rate limit; what was fetched is kept. No action needed." };
+    return { tone: "warn", status: "Partly collected", next: "Some requests failed; what was fetched is kept." };
+  }
+  if (s.truncated)
+    return { tone: "ok", status: "Working · sampled", next: "More matches exist than one request returns, so this source is a sample: used as evidence, left out of week-on-week trends." };
+  return { tone: "ok", status: "Working", next: "No action needed." };
+}
 
 export default async function HealthPage() {
   await connection();
@@ -30,139 +53,169 @@ export default async function HealthPage() {
   ]);
   if (!loaded.ok) return <ErrorPanel title="Could not load data health" error={loaded.error} />;
   const { runs, sources, queue } = loaded.data;
+
   const running = runs.find((r) => r.status === "running") ?? null;
-  const lastBySource = new Map<string, { status: string; at: string; error: string | null }>();
+  const lastGood = runs.find((r) => r.status === "succeeded" || r.status === "partial") ?? null;
+  const latestBySource = new Map<string, SourceRunRow>();
   const lastOkBySource = new Map<string, string>();
-  for (const r of runs) {
+  for (const r of runs)
     for (const s of r.source_runs) {
-      if (!lastBySource.has(s.source_id)) lastBySource.set(s.source_id, { status: s.status, at: s.created_at, error: s.error });
+      if (!latestBySource.has(s.source_id)) latestBySource.set(s.source_id, s);
       if ((s.status === "succeeded" || s.status === "partial") && !lastOkBySource.has(s.source_id)) lastOkBySource.set(s.source_id, s.created_at);
     }
-  }
   const lastCron = runs.find((r) => r.trigger === "cron");
-  const failedRuns = runs.filter((r) => r.status === "failed").length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-12">
       <PageHeader
-        title="Data health"
-        description="Collection runs, per-source results, analysis backlog and failures. A failed run is never counted as a successful collection."
-        actions={<RunControls isAdmin={admin} runningRunId={running?.id ?? null} showRetry showReport={false} compact />}
+        title="Sources & Data Health"
+        description="Whether collection is working: which sources answered, what was collected, what failed and what you can do about it."
+        meta={
+          <>
+            <span>Last successful collection {lastGood ? `${fmtRelative(lastGood.finished_at)} · ${fmtDateTime(lastGood.finished_at)}` : "never"}</span>
+            <span>Scheduled every Friday 08:00 IST</span>
+          </>
+        }
+        actions={<RunControls isAdmin={admin} runningRunId={running?.id ?? null} showRetry showReport={false} />}
       />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Last run" value={runs[0] ? <Badge tone={RUN_TONE[runs[0].status]}>{runs[0].status}</Badge> : "—"} sub={runs[0] ? `${fmtRelative(runs[0].started_at)} · ${runs[0].trigger}` : "no runs yet"} />
-        <Stat label="Last scheduled run" value={lastCron ? <Badge tone={RUN_TONE[lastCron.status]}>{lastCron.status}</Badge> : "none yet"} sub={lastCron ? fmtDateTime(lastCron.started_at) : "Fridays 08:00 IST via Vercel Cron"} hint="Vercel Cron calls /api/cron/weekly every Friday at 02:30 UTC (08:00 IST). On the Hobby plan the call can arrive any time within that hour." />
-        <Stat label="Awaiting analysis" value={<span className="tabular">{queue.pending}</span>} sub={`${queue.failed} failed (retried automatically, max 3 attempts)`} />
-        <Stat label="Failed runs (last 30)" value={<span className="tabular">{failedRuns}</span>} sub={`AI: ${isGeminiConfigured() ? "configured" : "NOT configured"} · email: ${isEmailConfigured() ? "configured" : "not configured"}`} />
-      </div>
-
-      <Card>
-        <CardHeader title="Sources" description="Latest result per source. Partial = some requests failed or results were truncated; data from working requests is kept." />
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border text-xs text-text-3">
-                <th className="px-4 py-2 font-medium">Source</th>
-                <th className="px-4 py-2 font-medium">Enabled</th>
-                <th className="px-4 py-2 font-medium">Latest result</th>
-                <th className="px-4 py-2 font-medium">Last successful collection</th>
-                <th className="px-4 py-2 font-medium">Latest error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sources.map((s) => {
-                const last = lastBySource.get(s.id);
-                return (
-                  <tr key={s.id} className="border-b border-border last:border-0 align-top">
-                    <td className="px-4 py-2.5">
-                      <SourceBadge source={s.id} />
-                    </td>
-                    <td className="px-4 py-2.5 text-text-2">{s.is_enabled ? "yes" : "no"}</td>
-                    <td className="px-4 py-2.5">{last ? <Badge tone={SRC_TONE[last.status as keyof typeof SRC_TONE]}>{last.status}</Badge> : <span className="text-text-3">never run</span>}</td>
-                    <td className="px-4 py-2.5 text-text-2">{lastOkBySource.get(s.id) ? fmtDateTime(lastOkBySource.get(s.id)) : "never"}</td>
-                    <td className="max-w-[24rem] px-4 py-2.5 text-xs break-words text-text-3">{last?.error ?? "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <section aria-label="Summary" className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:divide-x lg:divide-line">
+        <Metric
+          label="Latest collection"
+          value={runs[0] ? RUN_SHORT[runs[0].status] : "None yet"}
+          explanation={runs[0] ? `${runs[0].trigger === "cron" ? "Scheduled" : "Manual"} · started ${fmtRelative(runs[0].started_at)}${runs[0].status === "partial" ? " · some sources returned warnings (below)" : ""}` : "Start one with “Collect now”."}
+        />
+        <div className="lg:pl-8">
+          <Metric
+            label="Last scheduled run"
+            value={lastCron ? RUN_SHORT[lastCron.status] : "Not yet"}
+            explanation={lastCron ? fmtDateTime(lastCron.started_at) : "Vercel Cron calls it every Friday between 08:00 and 08:59 IST."}
+            tip="Vercel Cron triggers /api/cron/weekly at 02:30 UTC on Fridays (08:00 IST). On the Hobby plan the call can arrive any time within that hour."
+          />
         </div>
-      </Card>
+        <div className="lg:pl-8">
+          <Metric
+            label="Waiting for analysis"
+            value={queue.pending}
+            explanation={queue.failed ? `${queue.failed} failed analysis — retried automatically (up to 3 attempts)` : "Discussions collected but not yet analysed by Gemini."}
+          />
+        </div>
+        <div className="lg:pl-8">
+          <Metric
+            label="Integrations"
+            value={isGeminiConfigured() ? "Ready" : "Incomplete"}
+            explanation={`Gemini ${isGeminiConfigured() ? "configured" : "not configured"} · email ${isEmailConfigured() ? "configured" : "not configured"}`}
+          />
+        </div>
+      </section>
 
-      <Card>
-        <CardHeader title="Run log" description="Most recent first. Expand a run for per-source counts, analysis results and warnings." />
+      <Section title="Sources" description="Each collection asks every enabled source for your keywords. A source failing never stops the others.">
+        <ul className="divide-y divide-line border-y border-line">
+          {sources.map((s) => {
+            const latest = latestBySource.get(s.id);
+            const e = explain(latest, s.is_enabled);
+            return (
+              <li key={s.id} className="grid gap-3 py-5 md:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] md:items-start md:gap-6">
+                <div>
+                  <div className="text-[15px] font-medium text-ink">
+                    <SourceTag source={s.id} />
+                  </div>
+                  <p className="mt-1 flex items-center gap-2 text-[13px] text-ink-2">
+                    <StatusDot tone={e.tone} /> {e.status}
+                  </p>
+                </div>
+                <div className="min-w-0 text-[13px] leading-5 text-ink-2">
+                  <p>
+                    Last successful collection: <span className="text-ink">{lastOkBySource.get(s.id) ? fmtRelative(lastOkBySource.get(s.id)) : "never"}</span>
+                    {latest && (
+                      <>
+                        {" · "}last run found <span className="tabular text-ink">{latest.fetched_count}</span> matching ({latest.new_count} new, {latest.duplicate_count} already stored)
+                      </>
+                    )}
+                  </p>
+                  <p className="mt-1 text-ink-3">{e.next}</p>
+                  {latest?.error && (
+                    <details className="mt-1.5">
+                      <summary className="cursor-pointer text-ink-3 hover:text-ink-2">Technical detail</summary>
+                      <p className="mt-1 font-mono text-[12px] break-words text-ink-3">{latest.error}</p>
+                    </details>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 md:justify-end">
+                  <span className="text-[13px] text-ink-3">{s.is_enabled ? "Collecting" : "Off"}</span>
+                  <SourceToggle id={s.id} label={sourceLabel(s.id)} enabled={s.is_enabled} editable={admin} />
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        {!admin && <p className="mt-3 text-[13px] text-ink-3">Sign in to turn sources on or off.</p>}
+      </Section>
+
+      <Section title="Collection history" description="Every run is recorded — scheduled, manual or retry. Open a run for per-source results and warnings.">
         {runs.length === 0 ? (
-          <CardBody>
-            <EmptyState title="No runs yet">Start one with “Run collection now”, or wait for the Friday schedule.</EmptyState>
-          </CardBody>
+          <EmptyState title="No collections yet">Start one with “Collect now”, or wait for Friday’s scheduled run.</EmptyState>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-line border-y border-line">
             {runs.map((r) => {
               const st = r.stats ?? {};
               return (
                 <li key={r.id}>
-                  <details className="group px-4 py-3">
-                    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      <Badge tone={RUN_TONE[r.status]}>{r.status}</Badge>
-                      <span className="font-medium">{fmtDateTime(r.started_at)}</span>
-                      <span className="text-xs text-text-3">
-                        {r.trigger} · {fmtDuration(st.timingsMs?.total)} · {st.inserted ?? 0} new / {st.alreadyStored ?? 0} already stored · {st.analyzed ?? 0} analysed ({st.relevant ?? 0} relevant)
+                  <details className="group py-3.5">
+                    <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-4 gap-y-1 text-[14px] [&::-webkit-details-marker]:hidden">
+                      <ChevronRight aria-hidden className="size-4 text-ink-3 transition-transform group-open:rotate-90" />
+                      <span className="w-44 font-medium text-ink">{fmtDateTime(r.started_at)}</span>
+                      <Badge tone={RUN_TONE[r.status]}>{RUN_LABEL[r.status]}</Badge>
+                      <span className="text-[13px] text-ink-3">
+                        {r.trigger === "cron" ? "Scheduled" : r.trigger === "retry" ? "Retry" : "Manual"} · {fmtDuration(st.timingsMs?.total)} · {st.inserted ?? 0} new · {st.relevant ?? 0} relevant
                       </span>
                       {st.reportId && (
-                        <Link href={`/reports/${st.reportId}`} className="text-xs text-accent-text hover:underline">
-                          report
+                        <Link href={`/reports/${st.reportId}`} className="text-[13px] text-accent-ink hover:underline">
+                          View brief
                         </Link>
                       )}
-                      <span aria-hidden className="ml-auto text-text-3 group-open:rotate-90">›</span>
                     </summary>
-                    <div className="mt-3 space-y-3 text-sm">
-                      {r.error && <Callout tone="bad" title="Run error">{r.error}</Callout>}
+                    <div className="mt-3 space-y-3 pl-8 text-[13px]">
+                      {r.error && <Callout tone="bad" title="Why it failed">{r.error}</Callout>}
                       <div className="overflow-x-auto">
-                        <table className="tabular w-full min-w-[560px] text-left text-xs">
+                        <table className="tabular w-full min-w-[560px] text-left">
                           <thead>
-                            <tr className="text-text-3">
-                              <th className="py-1 pr-3 font-medium">Source</th>
-                              <th className="py-1 pr-3 font-medium">Status</th>
-                              <th className="py-1 pr-3 text-right font-medium">Requests</th>
-                              <th className="py-1 pr-3 text-right font-medium">Matched</th>
-                              <th className="py-1 pr-3 text-right font-medium">New</th>
-                              <th className="py-1 pr-3 text-right font-medium">Duplicates</th>
-                              <th className="py-1 pr-3 font-medium">Notes</th>
+                            <tr className="text-[12px] text-ink-3">
+                              <th className="py-1.5 pr-4 font-medium">Source</th>
+                              <th className="py-1.5 pr-4 font-medium">Result</th>
+                              <th className="py-1.5 pr-4 text-right font-medium">Matching</th>
+                              <th className="py-1.5 pr-4 text-right font-medium">New</th>
+                              <th className="py-1.5 pr-4 text-right font-medium">Already stored</th>
+                              <th className="py-1.5 font-medium">Time</th>
                             </tr>
                           </thead>
                           <tbody>
                             {r.source_runs.map((s) => (
-                              <tr key={s.id} className="border-t border-border align-top">
-                                <td className="py-1 pr-3">{sourceLabel(s.source_id)}</td>
-                                <td className="py-1 pr-3">
-                                  <Badge tone={SRC_TONE[s.status]}>{s.status}</Badge>
+                              <tr key={s.id} className="border-t border-line text-ink-2">
+                                <td className="py-1.5 pr-4">{sourceLabel(s.source_id)}</td>
+                                <td className="py-1.5 pr-4">
+                                  {explain(s, true).status}
                                 </td>
-                                <td className="py-1 pr-3 text-right">
-                                  {s.requests - s.failed_requests}/{s.requests}
-                                </td>
-                                <td className="py-1 pr-3 text-right">{s.fetched_count}</td>
-                                <td className="py-1 pr-3 text-right">{s.new_count}</td>
-                                <td className="py-1 pr-3 text-right">{s.duplicate_count}</td>
-                                <td className="max-w-[22rem] py-1 pr-3 break-words text-text-3">
-                                  {[s.truncated && "results truncated at page limit", s.error, fmtDuration(s.duration_ms)].filter(Boolean).join(" · ")}
-                                </td>
+                                <td className="py-1.5 pr-4 text-right">{s.fetched_count}</td>
+                                <td className="py-1.5 pr-4 text-right">{s.new_count}</td>
+                                <td className="py-1.5 pr-4 text-right">{s.duplicate_count}</td>
+                                <td className="py-1.5">{fmtDuration(s.duration_ms)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
                       </div>
-                      <p className="text-xs text-text-3">
-                        Window {fmtDateTime(r.lookback_start)} → {fmtDateTime(r.lookback_end)} · model {r.model ?? "—"} · pipeline {r.pipeline_version} · stage reached: {st.stage ?? "—"}
-                        {st.newPainPoints ? ` · ${st.newPainPoints} new pain point(s)` : ""}
-                        {st.pendingAfterRun ? ` · ${st.pendingAfterRun} still pending` : ""}
-                        {st.reportStatus ? ` · report ${st.reportStatus}` : ""}
+                      <p className="text-ink-3">
+                        Analysed {st.analyzed ?? 0} ({st.relevant ?? 0} relevant){st.newPainPoints ? ` · ${st.newPainPoints} new pain point(s)` : ""}
+                        {st.pendingAfterRun ? ` · ${st.pendingAfterRun} left for the next run` : ""} · brief: {st.reportStatus ?? "—"} · model {r.model ?? "—"}
                       </p>
-                      {st.reportError && <p className="text-xs text-warn">Report: {st.reportError}</p>}
+                      {st.reportError && <p className="text-up">Brief: {st.reportError}</p>}
                       {st.warnings && st.warnings.length > 0 && (
-                        <ul className="list-disc space-y-0.5 pl-4 text-xs text-text-2">
+                        <ul className={cx("list-disc space-y-0.5 pl-4 text-ink-3")}>
                           {st.warnings.map((w, i) => (
-                            <li key={i}>{w}</li>
+                            <li key={i} className="break-words">
+                              {w}
+                            </li>
                           ))}
                         </ul>
                       )}
@@ -173,7 +226,7 @@ export default async function HealthPage() {
             })}
           </ul>
         )}
-      </Card>
+      </Section>
     </div>
   );
 }

@@ -122,6 +122,7 @@ Hard rules:
 2. Use ONLY the numbers given in the pack. Do not compute new percentages, do not estimate market sizes, do not invent counts.
    If a trend is marked insufficient_data or the pack says data is insufficient, say so instead of describing growth.
 3. Never invent URLs, quotes, customer statements, companies or historical trends. Never output URLs.
+   Cite only through the "pain_points" / "evidence" arrays — never write keys such as P1 or D3 inside sentences.
 4. Distinguish observation from hypothesis: opportunities are hypotheses to validate, phrased with appropriate uncertainty.
    Frequency alone does not prove a market is underserved — look for unresolved problems, failed workarounds, complaints about tools.
 5. Be concise and concrete. Write for a PM who will act on it. British or American spelling is fine.
@@ -208,6 +209,35 @@ export function findUnverifiedNumbers(texts: string[], allowed: Set<number>): st
   return warnings;
 }
 
+/**
+ * Remove evidence-pack keys the model sometimes writes inline, e.g.
+ * "rose by 300% (P1)" or "see D3, D7". Keys are internal; readers see links instead.
+ */
+export function stripKeys(text: string): string {
+  return text
+    .replace(/\s*[([]\s*(?:[PD]\d+\s*(?:[,;/&]|and)?\s*)+[)\]]/g, "")
+    .replace(/\bsee\s+[PD]\d+(?:\s*(?:,|and)\s*[PD]\d+)*\b/gi, "")
+    .replace(/\b[PD]\d+(?:\s*(?:,|and)\s*[PD]\d+)+\b/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:])/g, "$1")
+    .trim();
+}
+
+/** Apply stripKeys to every free-text field of a brief (also used to clean stored briefs). */
+export function cleanBriefText<T>(value: T): T {
+  if (typeof value === "string") return stripKeys(value) as T;
+  if (Array.isArray(value)) return value.map(cleanBriefText) as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      // id arrays and enum fields are not prose
+      out[k] = ["evidence", "pain_points", "pain_point", "kind", "priority", "confidence", "tools_assessment"].includes(k) ? v : cleanBriefText(v);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 /** Map keys → ids, drop unsupported claims, check numbers. Pure — unit tested. */
 export function groundBrief(
   raw: BriefModelOutput,
@@ -268,7 +298,7 @@ export function groundBrief(
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  const brief: StoredBrief = {
+  const brief: StoredBrief = cleanBriefText({
     headline: raw.headline.trim(),
     executive_summary: keepCited("executive_summary", raw.executive_summary, (x) => x.text),
     notable_changes: keepCited("notable_changes", raw.notable_changes, (x) => x.text),
@@ -280,7 +310,7 @@ export function groundBrief(
       pain_point: keys.pKeys.get(q.pain_point.trim().toUpperCase()) ?? null,
     })),
     caveats: raw.caveats.map((c) => c.trim()).filter(Boolean),
-  };
+  });
 
   const texts = [
     brief.headline,

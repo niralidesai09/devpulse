@@ -1,23 +1,26 @@
 "use client";
 
-// "Run collection now" / "Retry" / "Generate report" controls with live
-// progress. Starts the run via POST /api/runs (admin cookie checked on the
-// server), then polls GET /api/runs/:id until it finishes.
+// Collection and brief controls with live progress. Starts the run via
+// POST /api/runs (admin session checked on the server), then polls
+// GET /api/runs/:id until it finishes. Outcomes are announced as toasts.
 
+import { FileText, Loader2, LogIn, RefreshCw, RotateCcw } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useFeedback } from "./Feedback";
 import { buttonClass } from "./ui";
 
 const STAGE_LABELS: Record<string, string> = {
-  starting: "Starting…",
-  collecting: "Collecting from sources…",
-  collected: "Stored discussions",
-  analysing: "Analysing with Gemini Flash…",
-  analysed: "Analysis done",
+  starting: "Starting",
+  collecting: "Collecting from sources",
+  collected: "Saving discussions",
+  analysing: "Analysing with Gemini",
+  analysed: "Grouping pain points",
   analysis_skipped: "Analysis skipped",
-  reporting: "Writing the brief…",
-  reported: "Brief written",
-  report_skipped: "Report skipped",
+  reporting: "Writing the brief",
+  reported: "Finishing",
+  report_skipped: "Finishing",
   done: "Done",
 };
 
@@ -28,18 +31,16 @@ export function RunControls({
   runningRunId,
   showRetry = false,
   showReport = true,
-  compact = false,
 }: {
   isAdmin: boolean;
   runningRunId: string | null;
   showRetry?: boolean;
   showReport?: boolean;
-  compact?: boolean;
 }) {
   const router = useRouter();
+  const { toast } = useFeedback();
   const [run, setRun] = useState<RunState | null>(runningRunId ? { id: runningRunId, status: "running", stage: null, error: null, reportId: null } : null);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | "run" | "report">(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -53,15 +54,9 @@ export function RunControls({
           if (cancelled) return;
           setRun(data);
           if (data.status !== "running") {
-            setMessage({
-              ok: data.status !== "failed",
-              text:
-                data.status === "succeeded"
-                  ? "Run finished. The dashboard now shows the new data."
-                  : data.status === "partial"
-                    ? "Run finished with warnings — see Data health for details."
-                    : `Run failed: ${data.error ?? "see Data health"}`,
-            });
+            if (data.status === "failed") toast(false, `Collection failed: ${data.error ?? "see Sources & Data Health"}`);
+            else if (data.status === "partial") toast(true, "Collection finished with warnings. Details are on Sources & Data Health.");
+            else toast(true, "Collection finished. The pages now show the new data.");
             router.refresh();
             return;
           }
@@ -76,11 +71,10 @@ export function RunControls({
       cancelled = true;
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [run, router]);
+  }, [run, router, toast]);
 
   async function start(mode: "manual" | "retry") {
-    setBusy(true);
-    setMessage(null);
+    setBusy("run");
     try {
       const res = await fetch("/api/runs", {
         method: "POST",
@@ -88,73 +82,69 @@ export function RunControls({
         body: JSON.stringify({ mode, resetFailed: mode === "retry" }),
       });
       const data = await res.json();
-      if (res.status === 202) setRun({ id: data.runId, status: "running", stage: "starting", error: null, reportId: null });
-      else if (res.status === 409 && data.runId) {
-        setMessage({ ok: false, text: data.error });
+      if (res.status === 202) {
+        setRun({ id: data.runId, status: "running", stage: "starting", error: null, reportId: null });
+        toast(true, "Collection started. It usually takes 1–4 minutes.");
+      } else if (res.status === 409 && data.runId) {
         setRun({ id: data.runId, status: "running", stage: null, error: null, reportId: null });
-      } else setMessage({ ok: false, text: data.error ?? `Request failed (${res.status})` });
+        toast(false, "A collection is already running — showing its progress.");
+      } else toast(false, data.error ?? `Could not start (${res.status})`);
     } catch (err) {
-      setMessage({ ok: false, text: `Could not reach the server: ${(err as Error).message}` });
+      toast(false, `Could not reach the server: ${(err as Error).message}`);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function generateReport() {
-    setBusy(true);
-    setMessage({ ok: true, text: "Generating the brief from stored data — this takes up to a minute…" });
+    setBusy("report");
     try {
       const res = await fetch("/api/reports", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       const data = await res.json();
       if (res.ok) {
-        setMessage({ ok: true, text: "Brief generated." });
+        toast(true, "Weekly brief generated.");
         router.push(`/reports/${data.reportId}`);
-      } else setMessage({ ok: false, text: data.error ?? `Report failed (${res.status})` });
+      } else toast(false, data.error ?? `Brief generation failed (${res.status})`);
     } catch (err) {
-      setMessage({ ok: false, text: `Could not reach the server: ${(err as Error).message}` });
+      toast(false, `Could not reach the server: ${(err as Error).message}`);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
-  const running = run?.status === "running";
-
   if (!isAdmin) {
     return (
-      <a href="/login?next=/" className={buttonClass("secondary", compact ? "sm" : "md")} title="Sign in with the admin passcode to start a collection">
-        Sign in to run
-      </a>
+      <Link href="/login" className={buttonClass("secondary", "sm")} title="Sign in with the admin passcode to collect new data or generate a brief">
+        <LogIn className="size-4" aria-hidden /> Sign in to refresh
+      </Link>
     );
   }
 
+  const running = run?.status === "running";
   return (
-    <div className="flex flex-col items-start gap-2 sm:items-end">
+    <div className="flex flex-col items-start gap-2 md:items-end">
       <div className="flex flex-wrap gap-2">
-        {showReport && (
-          <button type="button" className={buttonClass("secondary", compact ? "sm" : "md")} onClick={generateReport} disabled={busy || running}>
-            Generate brief
-          </button>
-        )}
         {showRetry && (
-          <button type="button" className={buttonClass("secondary", compact ? "sm" : "md")} onClick={() => start("retry")} disabled={busy || running} title="Collect again and re-queue discussions whose analysis failed">
-            Retry failed
+          <button type="button" className={buttonClass("secondary", "sm")} onClick={() => start("retry")} disabled={!!busy || running} title="Collect again and re-queue discussions whose analysis failed">
+            <RotateCcw className="size-4" aria-hidden /> Retry failed
           </button>
         )}
-        <button type="button" className={buttonClass("primary", compact ? "sm" : "md")} onClick={() => start("manual")} disabled={busy || running}>
-          {running ? (
-            <>
-              <span aria-hidden className="size-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-              Running…
-            </>
-          ) : (
-            "Run collection now"
-          )}
+        {showReport && (
+          <button type="button" className={buttonClass("secondary", "sm")} onClick={generateReport} disabled={!!busy || running} title="Write a new brief from the data already stored (about 30–60 seconds)">
+            {busy === "report" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FileText className="size-4" aria-hidden />}
+            {busy === "report" ? "Writing brief…" : "Generate brief"}
+          </button>
+        )}
+        <button type="button" className={buttonClass("primary", "sm")} onClick={() => start("manual")} disabled={!!busy || running} title="Collect new discussions from all sources, analyse them and write a new brief">
+          {running || busy === "run" ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <RefreshCw className="size-4" aria-hidden />}
+          {running ? "Collecting…" : "Collect now"}
         </button>
       </div>
-      <div aria-live="polite" className="min-h-4 text-xs">
-        {running && <span className="text-text-2">{STAGE_LABELS[run?.stage ?? "starting"] ?? run?.stage} Usually 1–4 minutes.</span>}
-        {!running && message && <span className={message.ok ? "text-good" : "text-bad"}>{message.text}</span>}
-      </div>
+      {running && (
+        <p aria-live="polite" className="text-[12px] text-ink-3">
+          {STAGE_LABELS[run?.stage ?? "starting"] ?? "Working"} · usually 1–4 minutes
+        </p>
+      )}
     </div>
   );
 }

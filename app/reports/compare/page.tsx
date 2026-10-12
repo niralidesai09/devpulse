@@ -5,7 +5,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
-import { Badge, Card, CardHeader, EmptyState, ErrorPanel, PageHeader } from "@/components/ui";
+import { Badge, EmptyState, ErrorPanel, PageHeader, Section } from "@/components/ui";
 import { getReport, getReportPainPoints, type ReportPainPointRow } from "@/lib/db/reports";
 import { safeLoad } from "@/lib/db/safe";
 import { fmtDateTime, fmtSigned, TREND_LABELS } from "@/lib/format";
@@ -51,13 +51,13 @@ export default async function ComparePage(props: PageProps<"/reports/compare">) 
   const order: Change["kind"][] = ["appeared", "grew", "reclassified", "declined", "disappeared", "unchanged"];
   changes.sort((p, q) => order.indexOf(p.kind) - order.indexOf(q.kind) || (q.b?.current_count ?? 0) - (p.b?.current_count ?? 0));
   const counts = Object.fromEntries(order.map((k) => [k, changes.filter((c) => c.kind === k).length]));
-  const tone = { appeared: "info", grew: "warn", reclassified: "accent", declined: "good", disappeared: "neutral", unchanged: "neutral" } as const;
+  const tone = { appeared: "accent", grew: "up", reclassified: "neutral", declined: "down", disappeared: "neutral", unchanged: "neutral" } as const;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
       <PageHeader
-        eyebrow={<Link href="/reports" className="hover:underline">← Reports</Link>}
-        title="Report comparison"
+        back={{ href: "/reports", label: "Weekly Briefs" }}
+        title="Compare briefs"
         description={
           <>
             <strong>A:</strong> {ra.metrics.current.label} (generated {fmtDateTime(ra.completed_at)}) → <strong>B:</strong> {rb.metrics.current.label} (generated {fmtDateTime(rb.completed_at)}). Uses the numbers saved with each report.
@@ -65,57 +65,56 @@ export default async function ComparePage(props: PageProps<"/reports/compare">) 
         }
       />
       {a === b && <EmptyState title="Same report selected twice">Pick two different reports to see changes.</EmptyState>}
-      <div className="flex flex-wrap gap-2 text-xs">
+      <div className="flex flex-wrap gap-2 text-[12px]">
         {order.map((k) => (
           <Badge key={k} tone={tone[k]}>
             {k}: {counts[k]}
           </Badge>
         ))}
       </div>
-      <Card>
-        <CardHeader title="Pain points across the two reports" description="Counts are each report's “this week” discussions for that pain point." />
+      <Section title="Pain points across the two briefs" description="Counts are each brief’s “this week” discussions for that pain point.">
         <div className="overflow-x-auto">
-          <table className="tabular w-full min-w-[640px] text-left text-sm">
+          <table className="tabular w-full min-w-[640px] text-left text-[14px]">
             <thead>
-              <tr className="border-b border-border text-xs text-text-3">
-                <th className="px-4 py-2 font-medium">Pain point</th>
-                <th className="px-4 py-2 font-medium">Change</th>
-                <th className="px-4 py-2 text-right font-medium">A</th>
-                <th className="px-4 py-2 text-right font-medium">B</th>
-                <th className="px-4 py-2 text-right font-medium">Δ</th>
-                <th className="px-4 py-2 font-medium">Rank A → B</th>
-                <th className="px-4 py-2 font-medium">Trend in B</th>
+              <tr className="border-b border-line text-[12px] text-ink-3">
+                <th className="px-3 py-2.5 font-medium">Pain point</th>
+                <th className="px-3 py-2.5 font-medium">Change</th>
+                <th className="px-3 py-2.5 text-right font-medium">A</th>
+                <th className="px-3 py-2.5 text-right font-medium">B</th>
+                <th className="px-3 py-2.5 text-right font-medium">Δ</th>
+                <th className="px-3 py-2.5 font-medium">Rank A → B</th>
+                <th className="px-3 py-2.5 font-medium">Trend in B</th>
               </tr>
             </thead>
             <tbody>
               {changes.map((c) => (
-                <tr key={c.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2">
+                <tr key={c.id} className="border-b border-line last:border-0">
+                  <td className="px-3 py-2.5">
                     <Link href={`/pain-points/${c.id}`} className="hover:underline">
                       {c.title}
                     </Link>
                     {c.kind === "reclassified" && (
-                      <p className="text-xs text-text-3">
+                      <p className="text-[12px] text-ink-3">
                         topic: {c.a?.topic_name ?? "—"} → {c.b?.topic_name ?? "—"}
                       </p>
                     )}
                   </td>
-                  <td className="px-4 py-2">
+                  <td className="px-3 py-2.5">
                     <Badge tone={tone[c.kind]}>{c.kind}</Badge>
                   </td>
-                  <td className="px-4 py-2 text-right">{c.a?.current_count ?? "—"}</td>
-                  <td className="px-4 py-2 text-right">{c.b?.current_count ?? "—"}</td>
-                  <td className="px-4 py-2 text-right">{fmtSigned((c.b?.current_count ?? 0) - (c.a?.current_count ?? 0))}</td>
-                  <td className="px-4 py-2 text-text-2">
+                  <td className="px-3 py-2.5 text-right">{c.a?.current_count ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-right">{c.b?.current_count ?? "—"}</td>
+                  <td className="px-3 py-2.5 text-right">{fmtSigned((c.b?.current_count ?? 0) - (c.a?.current_count ?? 0))}</td>
+                  <td className="px-3 py-2.5 text-ink-2">
                     {c.a?.rank ?? "—"} → {c.b?.rank ?? "—"}
                   </td>
-                  <td className="px-4 py-2 text-xs text-text-2">{c.b ? TREND_LABELS[c.b.trend_status as TrendStatus] : "—"}</td>
+                  <td className="px-3 py-2.5 text-[12px] text-ink-2">{c.b ? TREND_LABELS[c.b.trend_status as TrendStatus] : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </Card>
+      </Section>
     </div>
   );
 }

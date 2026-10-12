@@ -74,3 +74,13 @@ describe("isVerbatimQuote", () => {
     expect(isVerbatimQuote("nitpicks", source)).toBe(false);
   });
 });
+
+import { readableExcerpt } from "@/lib/text";
+
+describe("readableExcerpt (display only)", () => {
+  it("removes Markdown noise but keeps the words", () => {
+    expect(readableExcerpt("## Dependencies - Parent: #81 - [ ] Write `flaky test` [docs](https://x.y) **now**")).toBe(
+      "Dependencies Parent: #81 Write flaky test docs now",
+    );
+  });
+});

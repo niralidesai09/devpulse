@@ -19,6 +19,7 @@
   "dependencies": {
     "@google/genai": "^2.28.0",
     "@supabase/supabase-js": "^2.117.3",
+    "lucide-react": "^1.55.0",
     "mermaid": "^11.17.2",
     "next": "16.4.0",
     "react": "19.3.0",

@@ -1,109 +1,89 @@
+// Weekly Briefs — every saved report, newest first, plus comparison of two.
+
+import { ArrowRight, FileText } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { connection } from "next/server";
 import { RunControls } from "@/components/RunControls";
-import { Badge, buttonClass, Card, EmptyState, ErrorPanel, inputClass, PageHeader } from "@/components/ui";
+import { Badge, buttonClass, cx, EmptyState, ErrorPanel, inputClass, PageHeader, Section } from "@/components/ui";
 import { isAdmin } from "@/lib/auth";
 import { listReports } from "@/lib/db/reports";
 import { getRunningRun } from "@/lib/db/runs";
 import { safeLoad } from "@/lib/db/safe";
-import { fmtDate, fmtDateTime } from "@/lib/format";
+import { fmtDateTime, fmtPeriod } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Reports" };
+export const metadata: Metadata = { title: "Weekly Briefs" };
 
-const STATUS_TONE = { succeeded: "good", failed: "bad", generating: "info" } as const;
-const EMAIL_LABEL: Record<string, string> = {
-  sent: "emailed",
-  failed: "email failed",
-  pending: "email pending",
-  skipped: "not emailed",
-  not_configured: "email not configured",
-};
+const STATUS = { succeeded: { tone: "ok", label: "Ready" }, failed: { tone: "bad", label: "Failed" }, generating: { tone: "accent", label: "Generating" } } as const;
+const EMAIL: Record<string, string> = { sent: "Emailed", failed: "Email failed", pending: "Email pending", skipped: "Not emailed", not_configured: "" };
 
 export default async function ReportsPage() {
   await connection();
   const [admin, loaded] = await Promise.all([isAdmin(), safeLoad(async () => ({ reports: await listReports(), running: await getRunningRun() }))]);
-  if (!loaded.ok) return <ErrorPanel title="Could not load reports" error={loaded.error} />;
+  if (!loaded.ok) return <ErrorPanel title="Could not load briefs" error={loaded.error} />;
   const { reports, running } = loaded.data;
-  const ok = reports.filter((r) => r.status === "succeeded");
+  const ready = reports.filter((r) => r.status === "succeeded");
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-12">
       <PageHeader
-        title="Weekly briefs"
-        description="Every generated brief is stored as an immutable snapshot (numbers, AI text, evidence links), so past weeks can be re-read and compared exactly as they were."
-        actions={<RunControls isAdmin={admin} runningRunId={running?.id ?? null} compact />}
+        title="Weekly Briefs"
+        description="Every brief is saved exactly as it was written — numbers, AI summary and evidence links — so past weeks can be re-read and compared. A new one is written every Friday at 08:00 IST."
+        actions={<RunControls isAdmin={admin} runningRunId={running?.id ?? null} />}
       />
 
-      {ok.length >= 2 && (
-        <form action="/reports/compare" method="get" className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3 sm:flex-row sm:items-end">
-          <label className="grid flex-1 gap-1 text-xs font-medium text-text-2">
-            Compare
-            <select name="a" defaultValue={ok[1].id} className={inputClass}>
-              {ok.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {fmtDate(r.period_start)} – {fmtDate(new Date(new Date(r.period_end).getTime() - 1).toISOString(), { year: true })} · {fmtDateTime(r.completed_at)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid flex-1 gap-1 text-xs font-medium text-text-2">
-            with
-            <select name="b" defaultValue={ok[0].id} className={inputClass}>
-              {ok.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {fmtDate(r.period_start)} – {fmtDate(new Date(new Date(r.period_end).getTime() - 1).toISOString(), { year: true })} · {fmtDateTime(r.completed_at)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" className={buttonClass("secondary")}>
-            Compare reports
-          </button>
-        </form>
+      {reports.length === 0 ? (
+        <EmptyState icon={<FileText className="size-8" strokeWidth={1.5} aria-hidden />} title="No briefs yet">
+          The first brief is written after the first collection, or right away with “Generate brief” once discussions are stored.
+        </EmptyState>
+      ) : (
+        <Section title="All briefs" description="Newest first.">
+          <ul className="divide-y divide-line border-y border-line">
+            {reports.map((r, i) => (
+              <li key={r.id}>
+                <Link href={`/reports/${r.id}`} className="group grid gap-2 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-6">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-[15px] font-semibold text-ink group-hover:text-accent-ink">Week of {fmtPeriod(r.period_start, r.period_end)}</p>
+                      {i === 0 && r.status === "succeeded" && <Badge tone="accent">Latest</Badge>}
+                      <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>
+                    </div>
+                    <p className="mt-0.5 text-[13px] text-ink-3">
+                      Generated {fmtDateTime(r.completed_at ?? r.created_at)} · {r.trigger === "cron" ? "scheduled" : "on demand"}
+                      {EMAIL[r.email_status] ? ` · ${EMAIL[r.email_status]}` : ""}
+                      {r.status === "failed" && r.error ? ` · ${r.error.slice(0, 90)}` : ""}
+                    </p>
+                  </div>
+                  <span className="hidden items-center gap-1 text-[13px] font-medium text-ink-3 group-hover:text-accent-ink sm:inline-flex">
+                    Read <ArrowRight className="size-3.5" aria-hidden />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
-      {reports.length === 0 ? (
-        <EmptyState title="No reports yet">Reports are generated by the Friday schedule, after a manual collection, or with “Generate brief”.</EmptyState>
-      ) : (
-        <Card>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs text-text-3">
-                  <th className="px-4 py-2 font-medium">Reporting week</th>
-                  <th className="px-4 py-2 font-medium">Generated</th>
-                  <th className="px-4 py-2 font-medium">Trigger</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Delivery</th>
-                  <th className="px-4 py-2 font-medium" />
-                </tr>
-              </thead>
-              <tbody>
-                {reports.map((r) => (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2.5 font-medium">
-                      {fmtDate(r.period_start)} – {fmtDate(new Date(new Date(r.period_end).getTime() - 1).toISOString(), { year: true })}
-                    </td>
-                    <td className="px-4 py-2.5 text-text-2">{fmtDateTime(r.completed_at ?? r.created_at)}</td>
-                    <td className="px-4 py-2.5 text-text-2">{r.trigger}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge tone={STATUS_TONE[r.status]} title={r.error ?? undefined}>
-                        {r.status}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-xs text-text-3">{EMAIL_LABEL[r.email_status]}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      <Link href={`/reports/${r.id}`} className="text-xs text-accent-text hover:underline">
-                        Open
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+      {ready.length >= 2 && (
+        <Section title="Compare two briefs" description="See which problems appeared, disappeared, grew or declined between two saved briefs — using the numbers stored with each one.">
+          <form action="/reports/compare" method="get" className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            {(["a", "b"] as const).map((k, idx) => (
+              <label key={k} className="grid flex-1 gap-1.5 text-[13px] font-medium text-ink-2">
+                {idx === 0 ? "Earlier brief" : "Later brief"}
+                <select name={k} defaultValue={ready[idx === 0 ? 1 : 0].id} className={cx(inputClass)}>
+                  {ready.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {fmtPeriod(r.period_start, r.period_end)} · generated {fmtDateTime(r.completed_at)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <button type="submit" className={buttonClass("secondary")}>
+              Compare
+            </button>
+          </form>
+        </Section>
       )}
     </div>
   );

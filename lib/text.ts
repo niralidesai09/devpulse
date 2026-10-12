@@ -122,3 +122,22 @@ export function isVerbatimQuote(quote: string, source: string): boolean {
   const q = norm(quote);
   return q.length >= 12 && norm(source).includes(q);
 }
+
+/**
+ * Display-only: make Markdown-heavy excerpts (GitHub issues) readable.
+ * The stored text is never changed — this only affects how it is shown.
+ */
+export function readableExcerpt(text: string): string {
+  return text
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, "") // images
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1") // links → text
+    .replace(/`{1,3}([^`]*)`{1,3}/g, "$1") // inline code
+    .replace(/(^|\s)#{1,6}\s+/g, "$1") // headings
+    .replace(/(^|\s)[-*+]\s+\[[ xX]\]\s+/g, "$1") // task list items
+    .replace(/(^|\s)(?:[-*+]|\d+\.)\s+(?=\S)/g, "$1") // list markers
+    .replace(/\*\*([^*]+)\*\*|__([^_]+)__/g, "$1$2") // bold
+    .replace(/(^|\s)>\s+/g, "$1") // blockquotes
+    .replace(/\|/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}

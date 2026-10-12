@@ -1,9 +1,11 @@
 "use client";
 
-// Topic & keyword management. Each control calls an admin-protected
-// Server Action; results are announced inline. Destructive actions confirm first.
+// Monitored topics & keywords. Every control calls an admin-protected
+// Server Action; results are announced as toasts; destructive actions ask
+// for confirmation in an accessible dialog.
 
-import { useActionState, useState, useTransition } from "react";
+import { Archive, ArchiveRestore, Check, Pause, Pencil, Play, Plus, Trash2, X } from "lucide-react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import {
   addKeywordsAction,
   archiveTopicAction,
@@ -17,7 +19,8 @@ import {
   updateTopicAction,
   type ActionResult,
 } from "@/app/actions";
-import { Badge, buttonClass, cx, inputClass } from "./ui";
+import { useFeedback } from "./Feedback";
+import { Badge, buttonClass, cx, inputClass, labelClass } from "./ui";
 
 export type EditorTopic = {
   id: string;
@@ -30,63 +33,63 @@ export type EditorTopic = {
   lastCollection: string | null;
 };
 
-function Result({ result }: { result: ActionResult }) {
-  if (!result) return null;
-  return (
-    <p role={result.ok ? "status" : "alert"} className={cx("text-xs", result.ok ? "text-good" : "text-bad")}>
-      {result.message}
-    </p>
-  );
+/** Announce a server-action result as a toast once. */
+function useToastResult(result: ActionResult) {
+  const { toast } = useFeedback();
+  useEffect(() => {
+    if (result) toast(result.ok, result.message);
+  }, [result, toast]);
 }
 
-/** Run a one-shot action (toggle, delete…) with pending state + inline result. */
+/** One-shot actions (toggle, delete…) with pending state, optional confirmation and a toast. */
 function useAction() {
+  const { toast, confirm } = useFeedback();
   const [pending, start] = useTransition();
-  const [result, setResult] = useState<ActionResult>(null);
-  const run = (fn: () => Promise<ActionResult>, confirmText?: string) => {
-    if (confirmText && !window.confirm(confirmText)) return;
-    start(async () => setResult(await fn()));
+  const run = async (fn: () => Promise<ActionResult>, ask?: { title: string; body: string; confirmLabel: string; danger?: boolean }) => {
+    if (ask && !(await confirm(ask))) return;
+    start(async () => {
+      const r = await fn();
+      if (r) toast(r.ok, r.message);
+    });
   };
-  return { pending, result, run };
+  return { pending, run };
 }
 
-export function NewTopicForm({ disabled }: { disabled: boolean }) {
+export function NewTopicForm() {
   const [result, action, pending] = useActionState(createTopicAction, null);
+  useToastResult(result);
   return (
-    <form action={action} className="grid gap-3 md:grid-cols-[1fr_1fr]">
-      <label className="grid gap-1 text-xs font-medium text-text-2">
+    <form action={action} className="grid gap-4 md:grid-cols-2">
+      <label className={labelClass}>
         Topic name
-        <input name="name" required minLength={2} maxLength={80} className={inputClass} placeholder="e.g. Monorepo review workflows" disabled={disabled} />
+        <input name="name" required minLength={2} maxLength={80} className={inputClass} placeholder="e.g. Monorepo review workflows" />
       </label>
-      <label className="grid gap-1 text-xs font-medium text-text-2">
-        Description <span className="font-normal text-text-3">(helps the AI classify — optional)</span>
-        <input name="description" maxLength={300} className={inputClass} placeholder="What belongs in this topic?" disabled={disabled} />
+      <label className={labelClass}>
+        <span>
+          Description <span className="font-normal text-ink-3">— helps the AI decide what belongs here</span>
+        </span>
+        <input name="description" maxLength={300} className={inputClass} placeholder="What kind of discussion belongs in this topic?" />
       </label>
-      <label className="grid gap-1 text-xs font-medium text-text-2 md:col-span-2">
-        Keywords <span className="font-normal text-text-3">(comma or new-line separated; exact phrases developers would write)</span>
-        <textarea
-          name="keywords"
-          required
-          rows={2}
-          className={cx(inputClass, "h-auto py-1.5")}
-          placeholder="monorepo code review, CODEOWNERS bottleneck"
-          disabled={disabled}
-        />
+      <label className={cx(labelClass, "md:col-span-2")}>
+        <span>
+          Keywords <span className="font-normal text-ink-3">— phrases developers would actually write, separated by commas</span>
+        </span>
+        <textarea name="keywords" required rows={2} className={cx(inputClass, "h-auto py-2")} placeholder="monorepo code review, CODEOWNERS bottleneck" />
       </label>
-      <div className="flex items-center gap-3 md:col-span-2">
-        <button type="submit" className={buttonClass("primary")} disabled={disabled || pending}>
-          {pending ? "Creating…" : "Create topic"}
+      <div className="md:col-span-2">
+        <button type="submit" className={buttonClass("primary", "sm")} disabled={pending}>
+          <Plus className="size-4" aria-hidden /> {pending ? "Creating…" : "Create topic"}
         </button>
-        <Result result={result} />
       </div>
     </form>
   );
 }
 
-function KeywordChip({ k, disabled }: { k: EditorTopic["keywords"][number]; disabled: boolean }) {
-  const { pending, result, run } = useAction();
+function KeywordChip({ k, editable }: { k: EditorTopic["keywords"][number]; editable: boolean }) {
+  const { pending, run } = useAction();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(k.keyword);
+
   if (editing) {
     return (
       <form
@@ -100,98 +103,112 @@ function KeywordChip({ k, disabled }: { k: EditorTopic["keywords"][number]; disa
           });
         }}
       >
-        <input value={value} onChange={(e) => setValue(e.target.value)} aria-label="Keyword" className={cx(inputClass, "h-7 w-48 text-xs")} autoFocus maxLength={80} />
-        <button type="submit" className={buttonClass("primary", "sm")} disabled={pending}>
-          Save
+        <input value={value} onChange={(e) => setValue(e.target.value)} aria-label="Keyword" className={cx(inputClass, "h-8 w-52 text-[13px]")} autoFocus maxLength={80} />
+        <button type="submit" className={buttonClass("primary", "sm")} disabled={pending} aria-label="Save keyword">
+          <Check className="size-4" aria-hidden />
         </button>
-        <button type="button" className={buttonClass("ghost", "sm")} onClick={() => (setEditing(false), setValue(k.keyword))}>
-          Cancel
+        <button type="button" className={buttonClass("ghost", "sm")} onClick={() => (setEditing(false), setValue(k.keyword))} aria-label="Cancel editing">
+          <X className="size-4" aria-hidden />
         </button>
-        <Result result={result} />
       </form>
     );
   }
   return (
-    <span className={cx("group inline-flex items-center gap-1 rounded-md border border-border bg-surface-2 py-0.5 pl-2 pr-1 text-xs", !k.isActive && "opacity-60")}>
+    <span className={cx("group inline-flex h-7 items-center gap-0.5 rounded-full border border-line bg-panel pr-1 pl-3 text-[13px] text-ink", !k.isActive && "text-ink-3")}>
       <span className={cx(!k.isActive && "line-through")}>{k.keyword}</span>
-      {!disabled && (
-        <span className="inline-flex items-center">
-          <button type="button" title="Edit keyword" aria-label={`Edit keyword ${k.keyword}`} className="rounded px-1 text-text-3 hover:bg-surface-3 hover:text-text" onClick={() => setEditing(true)} disabled={pending}>
-            ✎
-          </button>
-          <button
-            type="button"
-            title={k.isActive ? "Pause keyword" : "Resume keyword"}
-            aria-label={`${k.isActive ? "Pause" : "Resume"} keyword ${k.keyword}`}
-            className="rounded px-1 text-text-3 hover:bg-surface-3 hover:text-text"
-            onClick={() => run(() => toggleKeywordAction(k.id, !k.isActive))}
+      {editable && (
+        <span className="ml-1 inline-flex items-center opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <IconButton label={`Edit keyword ${k.keyword}`} onClick={() => setEditing(true)} disabled={pending}>
+            <Pencil className="size-3.5" aria-hidden />
+          </IconButton>
+          <IconButton label={`${k.isActive ? "Pause" : "Resume"} keyword ${k.keyword}`} onClick={() => run(() => toggleKeywordAction(k.id, !k.isActive))} disabled={pending}>
+            {k.isActive ? <Pause className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
+          </IconButton>
+          <IconButton
+            label={`Remove keyword ${k.keyword}`}
+            danger
             disabled={pending}
+            onClick={() =>
+              run(() => deleteKeywordAction(k.id), {
+                title: `Remove “${k.keyword}”?`,
+                body: "Future collections will stop searching for it. Discussions it already found are kept.",
+                confirmLabel: "Remove keyword",
+                danger: true,
+              })
+            }
           >
-            {k.isActive ? "⏸" : "▶"}
-          </button>
-          <button
-            type="button"
-            title="Remove keyword"
-            aria-label={`Remove keyword ${k.keyword}`}
-            className="rounded px-1 text-text-3 hover:bg-bad-soft hover:text-bad"
-            onClick={() => run(() => deleteKeywordAction(k.id), `Remove the keyword “${k.keyword}”? Discussions it already found are kept.`)}
-            disabled={pending}
-          >
-            ×
-          </button>
+            <X className="size-3.5" aria-hidden />
+          </IconButton>
         </span>
       )}
-      {result && !result.ok && <span className="ml-1 text-bad">{result.message}</span>}
     </span>
   );
 }
 
-export function TopicCard({ topic, disabled }: { topic: EditorTopic; disabled: boolean }) {
+function IconButton({ label, onClick, disabled, danger, children }: { label: string; onClick: () => void; disabled?: boolean; danger?: boolean; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      onClick={onClick}
+      disabled={disabled}
+      className={cx("flex size-6 items-center justify-center rounded-full text-ink-3 transition-colors", danger ? "hover:bg-bad-soft hover:text-bad" : "hover:bg-sunken hover:text-ink")}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function TopicRow({ topic, editable }: { topic: EditorTopic; editable: boolean }) {
   const [editing, setEditing] = useState(false);
   const [updateResult, updateAction, updating] = useActionState(updateTopicAction, null);
   const [kwResult, kwAction, addingKw] = useActionState(addKeywordsAction, null);
-  const { pending, result, run } = useAction();
+  useToastResult(updateResult);
+  useToastResult(kwResult);
+  const { pending, run } = useAction();
 
   return (
-    <article className={cx("rounded-lg border border-border bg-surface p-4", topic.archived && "bg-surface-2")}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
+    <article className="py-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           {editing ? (
-            <form action={updateAction} className="grid gap-2 sm:w-[28rem]">
+            <form action={updateAction} className="grid max-w-xl gap-2" onSubmit={() => setEditing(false)}>
               <input type="hidden" name="id" value={topic.id} />
               <input name="name" defaultValue={topic.name} aria-label="Topic name" required minLength={2} maxLength={80} className={inputClass} />
-              <input name="description" defaultValue={topic.description ?? ""} aria-label="Description" maxLength={300} className={inputClass} />
-              <div className="flex items-center gap-2">
+              <input name="description" defaultValue={topic.description ?? ""} aria-label="Topic description" maxLength={300} className={inputClass} placeholder="Description" />
+              <div className="flex gap-2">
                 <button type="submit" className={buttonClass("primary", "sm")} disabled={updating}>
-                  Save
+                  Save changes
                 </button>
                 <button type="button" className={buttonClass("ghost", "sm")} onClick={() => setEditing(false)}>
-                  Close
+                  Cancel
                 </button>
-                <Result result={updateResult} />
               </div>
             </form>
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-sm font-semibold">{topic.name}</h3>
-                {topic.archived ? <Badge>Archived</Badge> : topic.isActive ? <Badge tone="good">● Monitoring</Badge> : <Badge tone="warn">⏸ Paused</Badge>}
+                <h3 className="text-[16px] font-semibold text-ink">{topic.name}</h3>
+                {topic.archived ? <Badge>Archived</Badge> : topic.isActive ? <Badge tone="ok">Monitoring</Badge> : <Badge tone="up">Paused</Badge>}
               </div>
-              {topic.description && <p className="mt-0.5 text-xs text-text-2">{topic.description}</p>}
+              {topic.description && <p className="mt-1 max-w-2xl text-[14px] leading-[22px] text-ink-2">{topic.description}</p>}
             </>
           )}
-          <p className="mt-1 text-xs text-text-3">
-            {topic.discussions} stored discussion{topic.discussions === 1 ? "" : "s"} matched · last successful collection: {topic.lastCollection ?? "not yet collected"}
+          <p className="mt-1.5 text-[12px] text-ink-3">
+            {topic.discussions} discussion{topic.discussions === 1 ? "" : "s"} found so far · last collected {topic.lastCollection ?? "not yet"}
           </p>
         </div>
-        {!disabled && !editing && (
-          <div className="flex flex-wrap gap-1.5">
+
+        {editable && !editing && (
+          <div className="flex shrink-0 flex-wrap gap-1.5">
             <button type="button" className={buttonClass("ghost", "sm")} onClick={() => setEditing(true)}>
-              Edit
+              <Pencil className="size-3.5" aria-hidden /> Edit
             </button>
             {!topic.archived && (
               <button type="button" className={buttonClass("secondary", "sm")} disabled={pending} onClick={() => run(() => setTopicActiveAction(topic.id, !topic.isActive))}>
-                {topic.isActive ? "Pause" : "Enable"}
+                {topic.isActive ? <Pause className="size-3.5" aria-hidden /> : <Play className="size-3.5" aria-hidden />}
+                {topic.isActive ? "Pause" : "Resume"}
               </button>
             )}
             <button
@@ -201,10 +218,17 @@ export function TopicCard({ topic, disabled }: { topic: EditorTopic; disabled: b
               onClick={() =>
                 run(
                   () => archiveTopicAction(topic.id, !topic.archived),
-                  topic.archived ? undefined : `Archive “${topic.name}”? It stops being monitored; its history stays in past reports.`,
+                  topic.archived
+                    ? undefined
+                    : {
+                        title: `Archive “${topic.name}”?`,
+                        body: "It stops being monitored. Its discussions and its place in past reports are kept, and you can restore it later.",
+                        confirmLabel: "Archive topic",
+                      },
                 )
               }
             >
+              {topic.archived ? <ArchiveRestore className="size-3.5" aria-hidden /> : <Archive className="size-3.5" aria-hidden />}
               {topic.archived ? "Restore" : "Archive"}
             </button>
             {topic.archived && (
@@ -212,52 +236,58 @@ export function TopicCard({ topic, disabled }: { topic: EditorTopic; disabled: b
                 type="button"
                 className={buttonClass("danger", "sm")}
                 disabled={pending}
-                onClick={() => run(() => deleteTopicAction(topic.id), `Permanently delete “${topic.name}” and its keywords? This only works if no analysed data references it.`)}
+                onClick={() =>
+                  run(() => deleteTopicAction(topic.id), {
+                    title: `Delete “${topic.name}” permanently?`,
+                    body: "This removes the topic and its keywords. It only works if no analysed discussion or pain point uses this topic — otherwise keep it archived.",
+                    confirmLabel: "Delete permanently",
+                    danger: true,
+                  })
+                }
               >
-                Delete
+                <Trash2 className="size-3.5" aria-hidden /> Delete
               </button>
             )}
           </div>
         )}
       </div>
 
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {topic.keywords.length ? topic.keywords.map((k) => <KeywordChip key={k.id} k={k} disabled={disabled} />) : <span className="text-xs text-text-3">No keywords — this topic cannot be collected.</span>}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {topic.keywords.length ? topic.keywords.map((k) => <KeywordChip key={k.id} k={k} editable={editable} />) : <span className="text-[13px] text-ink-3">No keywords — add one so this topic can be collected.</span>}
       </div>
 
-      {!disabled && !topic.archived && (
-        <form action={kwAction} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+      {editable && !topic.archived && (
+        <form action={kwAction} className="mt-3 flex max-w-lg gap-2">
           <input type="hidden" name="topicId" value={topic.id} />
-          <input name="keywords" aria-label={`Add keywords to ${topic.name}`} placeholder="Add keywords (comma separated)" className={cx(inputClass, "sm:max-w-sm")} maxLength={400} />
+          <input name="keywords" aria-label={`Add keywords to ${topic.name}`} placeholder="Add keywords, separated by commas" className={cx(inputClass, "h-8 text-[13px]")} maxLength={400} required />
           <button type="submit" className={buttonClass("secondary", "sm")} disabled={addingKw}>
-            Add
+            <Plus className="size-3.5" aria-hidden /> Add
           </button>
-          <Result result={kwResult} />
         </form>
       )}
-      <div className="mt-2">
-        <Result result={result} />
-      </div>
     </article>
   );
 }
 
-export function SourceToggle({ id, label, enabled, disabled }: { id: string; label: string; enabled: boolean; disabled: boolean }) {
-  const { pending, result, run } = useAction();
+export function SourceToggle({ id, label, enabled, editable }: { id: string; label: string; enabled: boolean; editable: boolean }) {
+  const { pending, run } = useAction();
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        aria-label={`${label} source`}
-        disabled={disabled || pending}
-        onClick={() => run(() => setSourceEnabledAction(id, !enabled))}
-        className={cx("relative h-5 w-9 rounded-full border transition-colors disabled:opacity-50", enabled ? "border-accent bg-accent" : "border-border-strong bg-surface-3")}
-      >
-        <span className={cx("absolute top-0.5 size-3.5 rounded-full bg-white shadow transition-all", enabled ? "left-[18px]" : "left-0.5")} />
-      </button>
-      <Result result={result} />
-    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={enabled}
+      aria-label={`Collect from ${label}`}
+      title={editable ? (enabled ? `Stop collecting from ${label}` : `Start collecting from ${label}`) : "Sign in to change"}
+      disabled={!editable || pending}
+      onClick={() =>
+        run(
+          () => setSourceEnabledAction(id, !enabled),
+          enabled ? { title: `Stop collecting from ${label}?`, body: "The next collection skips this source. Discussions already collected are kept.", confirmLabel: "Disable source" } : undefined,
+        )
+      }
+      className={cx("relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60", enabled ? "bg-accent" : "bg-line-strong")}
+    >
+      <span className={cx("absolute top-0.5 size-4 rounded-full bg-white shadow-sm transition-all", enabled ? "left-[18px]" : "left-0.5")} />
+    </button>
   );
 }

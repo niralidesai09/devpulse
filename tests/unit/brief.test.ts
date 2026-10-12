@@ -124,3 +124,19 @@ describe("planMerges (pain point merge validation)", () => {
     expect(plans[0]).toMatchObject({ survivorId: "c", mergedIds: ["d"] });
   });
 });
+
+import { stripKeys } from "@/lib/ai/brief";
+
+describe("stripKeys (no internal evidence keys in reader-facing text)", () => {
+  it.each([
+    ["Complaints spiked by +300% (P1), and developers…", "Complaints spiked by +300%, and developers…"],
+    ["Teams report stuck checks (D3, D7).", "Teams report stuck checks."],
+    ["As seen in D12 and D4 developers churn.", "As seen in developers churn."],
+    ["Bots are noisy [P2].", "Bots are noisy."],
+  ])("%s", (input, expected) => {
+    expect(stripKeys(input)).toBe(expected);
+  });
+  it("leaves ordinary text alone (e.g. P95 latency, PR numbers)", () => {
+    expect(stripKeys("P95 latency rose; PR 4123 merged in D3")).toBe("P95 latency rose; PR 4123 merged in D3");
+  });
+});

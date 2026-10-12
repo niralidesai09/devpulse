@@ -1,112 +1,77 @@
 @import "tailwindcss";
 
 /* =====================================================================
-   DevPulse design tokens
-   Neutral, low-chroma surfaces; one accent (indigo) for interaction;
-   data colours from the validated categorical palette (see docs/DESIGN.md);
-   status colours reserved for state and always paired with a label.
+   Developer Pulse — design tokens (single source of truth)
+   Calm, warm, light. One indigo accent. Status colours only for meaning,
+   always paired with a word or icon. See docs/UX_REDESIGN.md.
    ===================================================================== */
 
 :root {
   color-scheme: light;
-  --bg: #f9f9f7;
-  --surface: #ffffff;
-  --surface-2: #f4f4f1;
-  --surface-3: #ecebe6;
-  --border: #e4e3dd;
-  --border-strong: #cfcec6;
-  --text: #111110;
-  --text-2: #52514e;
-  --text-3: #75736d;
-  --accent: #4c5bd4;
-  --accent-hover: #3f4dc0;
-  --accent-soft: #eef0fd;
-  --accent-text: #3441b0;
-  --focus: #4c5bd4;
 
-  /* status (reserved) */
-  --good: #0a7d0a;
-  --good-soft: #e8f5e8;
-  --warn: #8a5a00;
-  --warn-soft: #fdf3dc;
-  --bad: #b42323;
-  --bad-soft: #fbeaea;
-  --info: #2a62b8;
-  --info-soft: #e8f0fb;
+  /* surfaces */
+  --bg: #f7f6f3; /* warm near-white page */
+  --panel: #fdfcfa; /* raised panels (not pure white) */
+  --sunken: #f1efea; /* wells, hovered rows, chips */
+  --line: #e7e4dd; /* hairline borders and dividers */
+  --line-strong: #d7d3ca;
 
-  /* data (validated categorical palette, light) */
+  /* text */
+  --ink: #1f1e1b;
+  --ink-2: #57534c;
+  --ink-3: #8a857c;
+
+  /* accent */
+  --accent: #4b55c8;
+  --accent-hover: #3f48b3;
+  --accent-soft: #eef0fb;
+  --accent-ink: #3a43a6;
+
+  /* status (meaning only) */
+  --up: #a35f0b; /* problem growing = caution */
+  --up-soft: #fbf1df;
+  --down: #2f7a4b; /* problem fading = good */
+  --down-soft: #e8f3ec;
+  --bad: #b23b33;
+  --bad-soft: #fbeceb;
+  --ok: #2f7a4b;
+
+  /* data */
+  --bar-current: #4b55c8;
+  --bar-previous: #cfcbc2;
   --series-1: #2a78d6;
   --series-2: #eb6834;
   --series-3: #1baf7a;
-  --series-4: #eda100;
-  --series-ref: #b9b8b1; /* previous week / reference */
-  --grid: #e9e8e2;
-  --axis: #c3c2b7;
+  --series-4: #e0a000;
+  --series-ref: #b9b4a9;
 
-  --shadow-sm: 0 1px 2px rgba(17, 17, 16, 0.04);
-  --shadow-md: 0 4px 16px rgba(17, 17, 16, 0.08);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-    --bg: #0d0d0d;
-    --surface: #161615;
-    --surface-2: #1d1d1b;
-    --surface-3: #262624;
-    --border: #2b2b29;
-    --border-strong: #3b3b38;
-    --text: #f3f3f1;
-    --text-2: #c3c2b7;
-    --text-3: #93918a;
-    --accent: #7b87ee;
-    --accent-hover: #8e98f1;
-    --accent-soft: #1f2340;
-    --accent-text: #aab2f6;
-    --focus: #8e98f1;
-    --good: #3cc23c;
-    --good-soft: #10260f;
-    --warn: #f0b43c;
-    --warn-soft: #2a2008;
-    --bad: #f07070;
-    --bad-soft: #2d1212;
-    --info: #6aa5f0;
-    --info-soft: #0f1e33;
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-ref: #55544f;
-    --grid: #262624;
-    --axis: #383835;
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
-  }
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-pop: 0 8px 28px rgba(31, 30, 27, 0.12), 0 1px 3px rgba(31, 30, 27, 0.08);
 }
 
 @theme inline {
   --color-bg: var(--bg);
-  --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-surface-3: var(--surface-3);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-text: var(--text);
-  --color-text-2: var(--text-2);
-  --color-text-3: var(--text-3);
+  --color-panel: var(--panel);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
   --color-accent-soft: var(--accent-soft);
-  --color-accent-text: var(--accent-text);
-  --color-good: var(--good);
-  --color-good-soft: var(--good-soft);
-  --color-warn: var(--warn);
-  --color-warn-soft: var(--warn-soft);
+  --color-accent-ink: var(--accent-ink);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
-  --color-info: var(--info);
-  --color-info-soft: var(--info-soft);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-ok: var(--ok);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
@@ -115,15 +80,20 @@ html {
 }
 body {
   background: var(--bg);
-  color: var(--text);
+  color: var(--ink);
   font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -132,12 +102,39 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Print: the report view prints cleanly without app chrome. */
+/* Fast, subtle entrance for toasts and popovers. */
+@keyframes dp-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: dp-pop 140ms ease-out;
+}
+
+dialog::backdrop {
+  background: rgba(31, 30, 27, 0.32);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Print: reports print as clean documents. */
 @media print {
   :root {
     --bg: #ffffff;
-    --surface: #ffffff;
-    --surface-2: #ffffff;
+    --panel: #ffffff;
   }
   .no-print {
     display: none !important;
@@ -149,7 +146,6 @@ body {
   }
   a {
     color: inherit;
-    text-decoration: underline;
   }
   section,
   article,

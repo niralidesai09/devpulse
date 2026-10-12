@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Mermaid } from "@/components/Mermaid";
-import { Card, CardBody, CardHeader, PageHeader } from "@/components/ui";
+import { PageHeader, Panel, Section } from "@/components/ui";
 import { COMPONENTS_MAP } from "@/lib/componentsMap";
 
 export const metadata: Metadata = { title: "Architecture" };
@@ -28,46 +28,37 @@ const BOUNDARIES = [
 
 export default function ArchitecturePage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-12">
       <PageHeader
-        title="Architecture & components map"
+        title="How it works"
         description="How data moves from public developer communities to the Friday brief. This diagram is generated from the same source as docs/COMPONENTS_MAP.md, and a unit test checks every table and route on it exists in the code."
       />
-      <Card>
-        <CardHeader title="Components map" />
-        <CardBody>
-          <Mermaid chart={COMPONENTS_MAP} />
-        </CardBody>
-      </Card>
+      <Panel className="p-6">
+        <Mermaid chart={COMPONENTS_MAP} />
+      </Panel>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader title="Pipeline stages" description="collection → normalisation → deduplication → relevance → classification → aggregation → trends → synthesis → storage" />
-          <CardBody>
+        <Section title="Pipeline stages" description="collection → normalisation → deduplication → relevance → classification → aggregation → trends → synthesis → storage">
             <ol className="space-y-3 text-sm">
               {STAGES.map(([t, d], i) => (
                 <li key={t}>
                   <p className="font-medium">
-                    <span className="tabular text-text-3">{i + 1}.</span> {t}
+                    <span className="tabular text-ink-3">{i + 1}.</span> {t}
                   </p>
-                  <p className="text-text-2">{d}</p>
+                  <p className="text-ink-2">{d}</p>
                 </li>
               ))}
             </ol>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader title="Security boundaries" />
-          <CardBody>
+        </Section>
+        <Section title="Security boundaries">
             <ul className="space-y-3 text-sm">
               {BOUNDARIES.map(([t, d]) => (
                 <li key={t}>
                   <p className="font-medium">{t}</p>
-                  <p className="text-text-2">{d}</p>
+                  <p className="text-ink-2">{d}</p>
                 </li>
               ))}
             </ul>
-          </CardBody>
-        </Card>
+        </Section>
       </div>
     </div>
   );
