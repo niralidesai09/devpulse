@@ -178,4 +178,13 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - `GET /api/debug/brief` (dev open / prod secret, 401 verified): latest brief as the email HTML; `?format=md` JSON; `?regenerate=1` re-write; `?email=1` re-send.
 - Live end-to-end run (2026-10-11, 71s): 149 collected, 62 kept, brief written in 15s with 26 evidence links, 0 unknown refs, 0 unverified numbers; **email sent** (emailed_at stored).
 
-**Next:** Step 7 (not started).
+### Step 7 — Dashboard, cron, deploy ✅ (2026-10-12)
+- Pages (all `await connection()` + root `loading.tsx` as the Suspense boundary): `/` KPI cards, topics ranked by Opportunity Score with top-3 evidence, week-over-week Recharts chart (HN keyword matches this vs last week; blue = this week, orange = last week; two-line ticks show "11 vs 20 · ▼ 45%"; table view in <details>), latest brief (`markdownToHtml`) with email status; `/topics` add / edit / pause / resume (server actions in `app/actions.ts`, Zod-validated); `/runs` history with per-source chips, brief/email status, issues.
+- Admin: `ADMIN_PASSCODE` (in .env.example; generated in .env.local). `lib/admin.ts`: httpOnly cookie = HMAC-SHA256(passcode, "devpulse-admin-v1"), constant-time compare, 7 days. Every action re-checks it. `POST /api/run` (maxDuration 300) = "Run now"; `components/run-now.tsx` shows a live seconds counter then `router.refresh()`.
+- Design: IBM Plex Sans/Mono, CSS-variable tokens for light + dark (`app/globals.css`), mobile-first (no horizontal scroll at 375px). Chart palette = dataviz reference slots 1–2 (a gray "last week" failed the chroma/contrast checks).
+- `vercel.json` cron `30 2 * * 5` (Fri 08:00 IST) → `/api/cron/weekly` (Bearer CRON_SECRET).
+- Verified locally: wrong passcode rejected; unlock; pause/resume reflected in DB; invalid topic rejected; **Run now** from the UI → "success · 60 relevant posts · brief emailed".
+- Vercel (CLI, account `nirali-desai-3979`; the Vercel MCP is logged into a different account): project `devpulse` (prj_I3JkGmWb5wRTwt46nvd6Sg75u9s1), Git-connected to niralidesai09/devpulse, **production branch = `roadmap`** (set via `PATCH /v9/projects/devpulse/branch`, user-approved), Vercel Authentication limited to **preview** so production is public. 10 production env vars copied from .env.local via stdin (values never printed; anon key as `--type config`).
+- Hobby plan blocks deployments whose commit author isn't linked to the account → commits must use `331916117+niralidesai09@users.noreply.github.com` (set per-commit with GIT_AUTHOR_EMAIL/GIT_COMMITTER_EMAIL; no shared git config changed).
+
+**Next:** Step 8 (not started).
