@@ -5,11 +5,12 @@
 //   4. The full Friday brief, exactly as emailed
 
 import { connection } from "next/server";
+import { EmergingRadar } from "@/components/emerging-radar";
 import { RunNow } from "@/components/run-now";
 import { ScoreExplainer, type ScoreContext } from "@/components/score-explainer";
 import { TrendChart } from "@/components/trend-chart";
 import { isAdmin } from "@/lib/admin";
-import { getDashboard, type TopicCard } from "@/lib/db/dashboard";
+import { getDashboard, getSuggestions, type TopicCard } from "@/lib/db/dashboard";
 import { fmtDate, fmtDateTime, fmtDuration, SOURCE_LABEL } from "@/lib/format";
 import { markdownToHtml } from "@/lib/markdown";
 
@@ -17,7 +18,7 @@ export const maxDuration = 60;
 
 export default async function HomePage() {
   await connection(); // always fresh data, never frozen at build time
-  const [dashboard, unlocked] = await Promise.all([getDashboard(), isAdmin()]);
+  const [dashboard, unlocked, suggestions] = await Promise.all([getDashboard(), isAdmin(), getSuggestions()]);
 
   if (!dashboard) {
     return (
@@ -106,7 +107,10 @@ export default async function HomePage() {
         </aside>
       </section>
 
-      {/* 4. The brief */}
+      {/* 4. Emerging Topic Radar */}
+      <EmergingRadar pending={suggestions.pending} decided={suggestions.decided} unlocked={unlocked} />
+
+      {/* 5. The brief */}
       <section className="mt-10 rounded-xl border border-line bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3 sm:px-6">
           <h2 className="text-sm font-semibold">This week&apos;s brief</h2>

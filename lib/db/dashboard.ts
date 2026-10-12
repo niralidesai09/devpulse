@@ -170,3 +170,47 @@ export async function getRuns(limit = 30): Promise<RunRow[]> {
   if (error) throw new Error(`Could not load runs: ${error.message}`);
   return (data ?? []).map(toRunRow);
 }
+
+export type Suggestion = {
+  id: string;
+  name: string;
+  description: string | null;
+  rationale: string | null;
+  keywords: string[];
+  evidence: { url: string; title: string; source: string }[];
+  postCount: number;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  decidedAt: string | null;
+};
+
+/** Emerging Topic Radar: pending suggestions first, plus the 5 latest decisions. */
+export async function getSuggestions(): Promise<{ pending: Suggestion[]; decided: Suggestion[] }> {
+  const supabase = createServerClient();
+  const [{ data: pending }, { data: decided }] = await Promise.all([
+    supabase.from("suggested_topics").select("*").eq("status", "pending").order("post_count", { ascending: false }).limit(10),
+    supabase.from("suggested_topics").select("*").neq("status", "pending").order("decided_at", { ascending: false }).limit(5),
+  ]);
+
+  // Look up titles for the evidence links (newest copy of each URL).
+  const urls = [...new Set([...(pending ?? []), ...(decided ?? [])].flatMap((s) => (s.evidence_urls ?? []) as string[]))];
+  const { data: posts } = urls.length
+    ? await supabase.from("posts").select("url, title, source, created_at").in("url", urls).order("created_at", { ascending: false })
+    : { data: [] };
+  const byUrl = new Map<string, { title: string; source: string }>();
+  for (const p of posts ?? []) if (!byUrl.has(p.url)) byUrl.set(p.url, { title: p.title, source: p.source });
+
+  const toSuggestion = (s: Record<string, unknown>): Suggestion => ({
+    id: s.id as string,
+    name: s.name as string,
+    description: (s.description as string) ?? null,
+    rationale: (s.rationale as string) ?? null,
+    keywords: (s.keywords as string[]) ?? [],
+    evidence: ((s.evidence_urls as string[]) ?? []).map((url) => ({ url, title: byUrl.get(url)?.title ?? url, source: byUrl.get(url)?.source ?? "" })),
+    postCount: Number(s.post_count ?? 0),
+    status: s.status as Suggestion["status"],
+    createdAt: s.created_at as string,
+    decidedAt: (s.decided_at as string) ?? null,
+  });
+  return { pending: (pending ?? []).map(toSuggestion), decided: (decided ?? []).map(toSuggestion) };
+}

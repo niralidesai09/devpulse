@@ -66,7 +66,7 @@ export type BriefData = {
   topics: TopicRow[];
   competitors: CompetitorRow[];
   evidence: Evidence[];
-  suggestedTopics: { name: string; keywords: string[] }[];
+  suggestedTopics: { name: string; description: string | null; keywords: string[] }[];
 };
 
 const round = (n: number, digits = 2) => Math.round(n * 10 ** digits) / 10 ** digits;
@@ -82,7 +82,7 @@ export async function loadBriefData(runId: string): Promise<BriefData> {
         .select("url, source, title, topic_id, pain_point, is_unresolved, unresolved_reason, severity, sentiment, competitors, score, comment_count")
         .eq("run_id", runId),
       supabase.from("topics").select("id, name"),
-      supabase.from("suggested_topics").select("name, keywords").eq("status", "pending").limit(10),
+      supabase.from("suggested_topics").select("name, description, keywords").eq("status", "pending").limit(10),
     ]);
   if (runError || !run) throw new Error(`Run ${runId} not found`);
 
@@ -97,7 +97,7 @@ export async function loadBriefData(runId: string): Promise<BriefData> {
     url: p.url,
     source: p.source,
     title: p.title,
-    topic: topicName.get(p.topic_id) ?? "Unknown",
+    topic: p.topic_id ? (topicName.get(p.topic_id) ?? "Unknown") : "Not monitored yet",
     painPoint: p.pain_point ?? "",
     isUnresolved: Boolean(p.is_unresolved),
     unresolvedReason: p.unresolved_reason ?? "",
@@ -158,7 +158,7 @@ const BriefSchema = z.object({
   tldr: z.array(z.string()).length(3).describe("Exactly 3 one-sentence bullets for a busy PM, with [E#] citations"),
   rising_falling: z.string().describe("Markdown bullets: which topics are rising and falling and why, with [E#] citations"),
   unresolved: z.string().describe("Markdown bullets: specific problems still unsolved or underserved by existing tools, with [E#] citations"),
-  emerging: z.string().describe("Markdown bullets: recurring pain points in the evidence that no monitored topic covers well, with [E#] citations. Say so plainly if there are none."),
+  emerging: z.string().describe("Markdown bullets: the radar's suggestedNewTopics (and other recurring pain points in evidence whose topic is 'Not monitored yet'), with [E#] citations. Mention they await Sumit's approval on the dashboard. Say so plainly if there are none."),
   competitor_commentary: z.string().describe("1-3 sentences on what developers say about competitor tools, with [E#] citations"),
   objections: z
     .array(z.object({ objection: z.string(), response: z.string(), evidence: evidenceIds }))

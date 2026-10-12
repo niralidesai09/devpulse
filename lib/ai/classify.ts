@@ -17,6 +17,9 @@ import { generateJson } from "./gemini";
 const BATCH_SIZE = 25;
 const PARALLEL_BATCHES = 3;
 const IRRELEVANT = "irrelevant";
+// A real pain point in Sumit's space that NO monitored topic covers.
+// These posts are kept (topicId = null) and feed the Emerging Topic Radar.
+const OTHER = "other";
 
 // Competitor tools Sumit cares about. Gemini's answers are mapped to these
 // exact names so "coderabbit" and "Code Rabbit" count as the same tool.
@@ -46,7 +49,7 @@ function normaliseCompetitor(name: string): string {
 }
 
 export type Classification = {
-  topicId: string;
+  topicId: string | null; // null = relevant, but no monitored topic fits ("other")
   painPoint: string;
   isUnresolved: boolean;
   unresolvedReason: string;
@@ -72,8 +75,8 @@ function buildSchema(topicKeys: string[]) {
       z.object({
         id: z.string().describe("The post id exactly as given, e.g. p3"),
         topic: z
-          .enum([IRRELEVANT, ...topicKeys])
-          .describe(`Best matching topic key, or "${IRRELEVANT}"`),
+          .enum([IRRELEVANT, OTHER, ...topicKeys])
+          .describe(`Best matching topic key, "${OTHER}" or "${IRRELEVANT}"`),
         pain_point: z
           .string()
           .describe("One line (max 20 words): the developer's problem. For irrelevant posts: why it is irrelevant."),
@@ -92,6 +95,8 @@ You read public developer posts (Hacker News, Stack Overflow, GitHub Issues, DEV
 
 Rules:
 - topic: choose the ONE topic key that best fits the developer problem in the post. The keyword that found the post is only a hint.
+  Use "${OTHER}" when the post IS a real developer pain point about code review, CI/CD, testing or developer workflow,
+  but none of the topics fits it well (do not force a weak match).
   Use "${IRRELEVANT}" when the post has no real developer pain point or opinion about code review, CI/CD, testing or developer workflow.
   Examples of irrelevant: release notes, changelogs, auto-generated task lists, job ads, the keyword used in an unrelated sense
   (e.g. "false positive" in medical tests or fraud detection), pure product announcements with no problem described,
@@ -153,8 +158,8 @@ async function classifyBatch(posts: SourcePost[], topics: Pick<Topic, "id" | "na
     if (!post || seen.has(r.id)) continue; // unknown or duplicate id -> ignore
     seen.add(r.id);
 
-    const topicId = keyToTopicId.get(r.topic);
-    if (!topicId) {
+    const topicId = r.topic === OTHER ? null : keyToTopicId.get(r.topic);
+    if (topicId === undefined) {
       dropped.push({ post, note: r.pain_point });
       continue;
     }

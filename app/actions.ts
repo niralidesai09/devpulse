@@ -82,3 +82,40 @@ export async function setTopicActiveAction(formData: FormData): Promise<void> {
     .eq("id", id.data);
   refresh();
 }
+
+// ---------------------------------------------------------------------
+// Emerging Topic Radar: approve -> becomes a monitored topic; reject -> hidden.
+// ---------------------------------------------------------------------
+export async function decideSuggestionAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (!(await isAdmin())) return { ok: false, message: "Unlock with the admin passcode first." };
+  const id = z.string().uuid().safeParse(formData.get("id"));
+  const decision = formData.get("decision");
+  if (!id.success || (decision !== "approve" && decision !== "reject")) return { ok: false, message: "Invalid request." };
+
+  const supabase = createServerClient();
+  const { data: suggestion } = await supabase.from("suggested_topics").select("*").eq("id", id.data).single();
+  if (!suggestion || suggestion.status !== "pending") return { ok: false, message: "This suggestion was already decided." };
+
+  if (decision === "reject") {
+    await supabase.from("suggested_topics").update({ status: "rejected", decided_at: new Date().toISOString() }).eq("id", id.data);
+    refresh();
+    return { ok: true, message: "Rejected. It won't be suggested again." };
+  }
+
+  // Approve: create the topic Sumit will monitor from the next run.
+  const { data: topic, error } = await supabase
+    .from("topics")
+    .insert({ name: suggestion.name, description: suggestion.description, keywords: suggestion.keywords, is_active: true })
+    .select("id")
+    .single();
+  if (error || !topic) {
+    const duplicate = error?.code === "23505";
+    return { ok: false, message: duplicate ? "A topic with this name already exists." : `Could not create topic: ${error?.message}` };
+  }
+  await supabase
+    .from("suggested_topics")
+    .update({ status: "approved", decided_at: new Date().toISOString(), topic_id: topic.id })
+    .eq("id", id.data);
+  refresh();
+  return { ok: true, message: "Approved. It is now a monitored topic (edit its keywords on the Topics page)." };
+}

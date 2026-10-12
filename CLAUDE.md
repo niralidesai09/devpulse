@@ -195,4 +195,12 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - `scoring.ts`: components rounded to 4 dp BEFORE multiplying (was 3 dp after), so the shown maths always multiplies out. Verified: unit check + all 8 live formulas recomputed from the production HTML → product and score match.
 - Mobile fix: grid gets `grid-cols-[minmax(0,1fr)]` below lg (an open panel made the page 409px wide at 375px; now 375px with all panels open).
 
-**Next:** Step 9 (not started).
+### Step 9 — Emerging Topic Radar ✅ (2026-10-12)
+- Classifier has a 3rd outcome **`other`** = a real pain point in Sumit's space that no monitored topic fits ("don't force a weak match"). Those posts are saved with `topic_id = null` (not dropped). Brief evidence labels them "Not monitored yet".
+- `lib/pipeline/radar.ts` `runEmergingTopicRadar(runId, unmatched, topics)`: needs ≥3 unmatched posts; Gemini (structured JSON, Zod) clusters up to 80 of them into ≤4 suggestions {name, description, rationale, keywords 5–8, evidence ids}. Code checks: ≥2 real evidence posts; name not an existing topic or ANY earlier suggestion (pending/approved/rejected → rejected ideas don't return); keywords already monitored removed, ≥3 must remain. Saved to `suggested_topics` (status pending, evidence_urls, post_count).
+- Runs in the pipeline after topic_stats and BEFORE the brief (brief section 5 mentions pending suggestions). Radar error ⇒ run "partial".
+- Migration `step9_emerging_topic_radar` (0005_step9_…): suggested_topics + description, rationale, post_count, decided_at, topic_id (→ topics, set null).
+- `decideSuggestionAction` (admin cookie): approve → insert into topics (active, same keywords) + status approved, decided_at, topic_id; reject → status rejected. Dashboard panel `components/emerging-radar.tsx` (+ `suggestion-buttons.tsx`): pending cards (description, why it matters, keyword chips, evidence links, Approve & monitor / Reject when unlocked) + "Recently decided".
+- Live run (2026-10-12, local, 95s): 250 collected, 81 kept, **12 unmatched → 3 suggestions** (Bot Review Follow-up Tracking, AI Review Compliance Gating, Branch Protection Ruleset Configuration), 0 rejected by checks. UI test: approved "Branch Protection Ruleset Configuration" → now an active topic with its 5 keywords; rejected "AI Review Compliance Gating". (Brief self-check caught 1 unknown evidence id from Gemini and removed it.)
+
+**Next:** Step 10 (not started).

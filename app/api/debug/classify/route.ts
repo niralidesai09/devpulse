@@ -56,7 +56,7 @@ export async function GET(request: Request) {
         title: p.title,
         url: p.url,
         keywordTopic: nameById.get(p.topicId),
-        topic: nameById.get(p.classification.topicId),
+        topic: p.classification.topicId ? nameById.get(p.classification.topicId) : "(other: not monitored yet)",
         painPoint: p.classification.painPoint,
         isUnresolved: p.classification.isUnresolved,
         unresolvedReason: p.classification.unresolvedReason,
