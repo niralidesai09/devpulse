@@ -21,11 +21,18 @@ function MapDownloads() {
         Components Map (PDF)
       </a>
       <a
+        href="/groundswell-components-map.png"
+        download
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong px-3 text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink"
+      >
+        Image (PNG)
+      </a>
+      <a
         href="/groundswell-components-map.md"
         download
         className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong px-3 text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink"
       >
-        Markdown
+        Detailed table
       </a>
     </div>
   );

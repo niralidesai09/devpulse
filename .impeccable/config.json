@@ -1,7 +1,9 @@
 {
   "detector": {
     "ignoreRules": [],
-    "ignoreFiles": [],
+    "ignoreFiles": [
+      "scripts/components-map.html"
+    ],
     "ignoreValues": [
       {
         "rule": "overused-font",

@@ -2,7 +2,7 @@
 
 **Live app:** https://devpulse-sable-seven.vercel.app · **Diagram:** https://devpulse-sable-seven.vercel.app/architecture  
 **Repository:** https://github.com/niralidesai09/devpulse (branch `roadmap`)  
-**Download:** https://devpulse-sable-seven.vercel.app/groundswell-components-map.pdf
+**Download:** https://devpulse-sable-seven.vercel.app/groundswell-components-map.pdf (swimlane poster; also .png)
 
 Groundswell is a weekly developer-community intelligence digest for Sumit, the PM of a code review automation startup.
 Every Friday at 08:00 IST it collects live discussions, analyses them with **Google Gemini Flash**, and emails an evidence-linked brief.
