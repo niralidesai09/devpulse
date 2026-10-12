@@ -5,6 +5,9 @@ import { connection } from "next/server";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { getRuns, sourceOutcome, type RunRow } from "@/lib/db/dashboard";
 import { fmtDateTime, fmtDuration, SOURCE_LABEL } from "@/lib/format";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Runs" };
 
 const STATUS_STYLE: Record<RunRow["status"], string> = {
   success: "text-good",

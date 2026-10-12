@@ -6,7 +6,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
 import { COMPONENT_GROUPS } from "@/lib/components-map";
 
-export const metadata: Metadata = { title: "Architecture · Groundswell" };
+export const metadata: Metadata = { title: "How it works" };
 
 export default function ArchitecturePage() {
   return (

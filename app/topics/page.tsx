@@ -9,6 +9,9 @@ import { PageHeader } from "@/components/ui";
 import { UnlockForm } from "@/components/unlock-form";
 import { isAdmin } from "@/lib/admin";
 import { createServerClient, type Topic } from "@/lib/db/supabase";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Topics" };
 
 export default async function TopicsPage() {
   await connection();
