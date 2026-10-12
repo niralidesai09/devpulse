@@ -8,6 +8,16 @@
         "value": "arial",
         "createdAt": "2026-10-11T13:37:46.996Z",
         "reason": "Claude: HTML email template (lib/email/brief-email.ts) — email clients don't reliably load web fonts, so a system/Arial fallback stack is the domain-appropriate choice"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "roboto",
+        "createdAt": "2026-10-12T17:31:15.756Z"
+      },
+      {
+        "rule": "design-system-font",
+        "value": "arial",
+        "createdAt": "2026-10-12T17:31:15.768Z"
       }
     ]
   }
