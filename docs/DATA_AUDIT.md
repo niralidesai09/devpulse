@@ -1,6 +1,7 @@
 # Groundswell: data integrity and provenance audit
 
 Audit date: 12 Oct 2026 · Branch `roadmap` · Audited run `ed3b0e66-2c00-4e74-b0e3-681b929239cf` (12 Oct 2026, 21:12 IST, scheduled pipeline, status **success**).
+Production confirmation: after deploying the audited code, production run `b4e2841a-ac94-41cc-8a7d-9f71bf06ee0c` (cron path) finished **success** in 84 s with all four sources `ok`, 232 collected, 76 relevant, 34 duplicates merged, 0 invalid links, brief with 34 evidence links / 0 unknown ids / 0 unverified numbers, email sent; provenance **PASS 16 · WARN 3 · FAIL 0**.
 Re-run the provenance check at any time: `npm run verify:provenance -- 8`. Unit tests: `npm test`.
 
 ## A. Source-by-source verification
@@ -73,6 +74,10 @@ No metric can produce NaN or Infinity (tested for every pair of counts from 0 to
 ## H. Reddit
 
 Not integrated, and the app does not claim it. Authorised access requires a Reddit OAuth app (client id + secret registered under the owner's account) and compliance with Reddit's Data API terms and rate limits. No credentials are available, so it is **BLOCKED**; the four working sources were left untouched.
+
+## I. Deployment
+
+Live: **https://devpulse-sable-seven.vercel.app** (Vercel production, branch `roadmap`, commit `d1adb0d`). All pages return 200; the dashboard shows the new metric labels and no model name.
 
 ## J. Not independently verifiable
 
