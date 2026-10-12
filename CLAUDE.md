@@ -242,4 +242,6 @@ Full report: `docs/DATA_AUDIT.md`. Key changes:
 - Lifecycle vocabulary everywhere (also the emailed brief): new · rising · steady · falling · too few to compare (no ▲/▼ glyphs).
 - Verified: 0 px horizontal overflow on all 8 routes at 375 / 768 / 1024 px; drawer open/Escape/navigate; Evidence filter counts reconcile with the ledger (52+16+6+1 = 75; 58+17 = 75; 4 not monitored); Ask answers on /ask; dark mode. Tests 31/31, lint 0, tsc OK, build OK, impeccable detector 0 findings. Independent finish review (impeccable-finish-reviewer): first verdict "fix" (8 items) → all applied and recaptured.
 
+- 2026-10-12 follow-up: Overview gained "This week in three answers" (the problem statement's three questions: most discussed with counts · trending up/down vs last week · unresolved/underserved), built from stored figures only. Components Map updated for the new pages; downloadable at `/groundswell-components-map.pdf` and `.md` (built by `npm run build:map` with headless Chrome from docs/COMPONENTS_MAP.md), with download buttons on /architecture.
+
 **All roadmap steps complete.**
