@@ -164,4 +164,12 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - Live run (2026-10-11, 43s): HN 42, SO 0, GitHub 122, DEV.to 28 → 157 collected, 58 kept, 99 dropped, 7 Gemini batches, 0 errors, status **success**. Ranking: Flaky tests 100 (new, 15 mentions), CI/CD 59, Code review bottlenecks 42, Trust in AI code review 26 (▼45%, most mentions 18), False positives 18 (▼55%), PR size 10.
 - Known limits: HN baseline counts are small (0–20/week) so trends are noisy; some kept GitHub posts are borderline (agent-written tickets) — evidence links are ranked by engagement.
 
-**Next:** Step 6 (not started).
+**Next:** Step 6 (not started). *(Superseded on `main` by v2 below; v1 Steps 5+ continue on branch `roadmap`.)*
+
+### v2 — Evidence-backed intelligence product ✅ (2026-10-12, branch `main`)
+- Live: https://devpulse-v2-delta.vercel.app (Vercel project **devpulse-v2**; the `devpulse` project belongs to the v1/roadmap session). Deploy with `npx vercel deploy --prod --scope nirali-desai-3979`.
+- Schema v2 (`supabase/migrations/0005`, `0006`; paste-ready `supabase/SETUP_V2.sql`), **additive** — v1 tables untouched because the DB is shared with `roadmap`: topic_keywords, sources, collection_runs, source_runs, discussions (unique source+id, url_normalized), discussion_analysis, pain_points (merged_into), reports, report_pain_points, report_evidence, pain_point_decisions. RLS deny-all for anon.
+- Pipeline `lib/pipeline/run.ts`: collect (4 adapters) → idempotent ingest (`ingest_discussions()`) → Gemini Stage A analyse (verbatim quote check) → Stage B consolidate → Stage B2 merge → code metrics (IST Fri–Thu weeks, like-for-like untruncated sources, min-sample rules, signal score) → Stage C grounded brief → snapshot + evidence → Resend. Time-boxed to 285 s.
+- UI: Overview, Pain points (+detail, decisions, evidence graph), Opportunities, Discussions explorer, Reports (+compare, print, MD/JSON export), Decisions, Data health, Settings (topic/keyword/source CRUD), Architecture, Login (ADMIN_PASSCODE, HMAC cookie).
+- Verified live 12 Oct: 455 discussions (HN 115, GitHub 261, DEV 78, SO 1), 201 relevant, 51 pain points, 3 briefs, 2 emails sent; prod cron 401/200/skipped-duplicate. Tests: 105 unit/integration, live sources/Gemini/DB, Playwright e2e on prod (desktop+mobile).
+- Docs: README, docs/* (ARCHITECTURE, COMPONENTS_MAP, DATA_SOURCES, API, SECURITY, TESTING, DEPLOYMENT, LIMITATIONS, DEMO_SCRIPT, VIVA_GUIDE, SUBMISSION_CHECKLIST).

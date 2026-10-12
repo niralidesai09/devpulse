@@ -67,7 +67,7 @@ export function PainPointTable({
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-text-3">
                     {p.topicName && <span>{p.topicName}</span>}
                     {p.sourcesAll.length > 1 && <span>· {p.sourcesAll.length} sources</span>}
-                    {d && <Badge tone="accent" title={`PM decision: ${d.rationale ?? "no rationale"}`}>PM: {DECISION_LABEL[d.decision]}</Badge>}
+                    {d && <Badge tone="accent" wrap title={`PM decision: ${d.rationale ?? "no rationale"}`}>PM: {DECISION_LABEL[d.decision]}</Badge>}
                   </div>
                 </td>
                 <td className="px-3 py-2.5 text-right font-medium">{p.current}</td>

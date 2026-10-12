@@ -156,12 +156,12 @@ export default async function DiscussionsPage(props: PageProps<"/discussions">) 
                       {d.score ?? 0} pts · {d.comment_count ?? 0} {signals.kind === "question" ? "answers" : "comments"}
                     </span>
                     {signals.isOpen !== undefined && <span>{signals.isOpen ? "open issue" : "closed issue"}</span>}
-                    {d.is_excluded && <Badge tone="warn">excluded{d.exclusion_reason ? `: ${d.exclusion_reason}` : ""}</Badge>}
+                    {d.is_excluded && <Badge tone="warn" wrap>excluded{d.exclusion_reason ? `: ${d.exclusion_reason}` : ""}</Badge>}
                     {d.analysis_status === "pending" && <Badge>awaiting analysis</Badge>}
                     {d.analysis_status === "failed" && <Badge tone="bad">analysis failed</Badge>}
                   </div>
                   <div className="mt-1 flex items-start justify-between gap-3">
-                    <SourceLink href={d.url} className="text-sm font-medium text-text">
+                    <SourceLink href={d.url} className="min-w-0 break-words text-sm font-medium text-text">
                       {d.title}
                     </SourceLink>
                     <Link href={`/discussions/${d.id}`} className="shrink-0 text-xs text-accent-text hover:underline">
@@ -176,8 +176,8 @@ export default async function DiscussionsPage(props: PageProps<"/discussions">) 
                         <>
                           {a.topic && <Badge>{a.topic.name}</Badge>}
                           {a.pain_point && (
-                            <Link href={`/pain-points/${a.pain_point.id}`} className="hover:underline">
-                              <Badge tone="accent">{a.pain_point.title}</Badge>
+                            <Link href={`/pain-points/${a.pain_point.id}`} className="min-w-0 hover:underline">
+                              <Badge tone="accent" wrap>{a.pain_point.title}</Badge>
                             </Link>
                           )}
                           {a.is_unresolved && <Badge tone="warn">unresolved</Badge>}

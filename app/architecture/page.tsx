@@ -39,7 +39,7 @@ export default function ArchitecturePage() {
           <Mermaid chart={COMPONENTS_MAP} />
         </CardBody>
       </Card>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader title="Pipeline stages" description="collection → normalisation → deduplication → relevance → classification → aggregation → trends → synthesis → storage" />
           <CardBody>

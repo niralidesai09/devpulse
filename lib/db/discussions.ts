@@ -11,7 +11,11 @@ import type { AnalysisRow, DiscussionRow, PainPointRow, TopicRow } from "./types
 // Ingestion
 // ---------------------------------------------------------------------
 
-/** Store collected discussions idempotently. Returns new/duplicate counts per source. */
+/**
+ * Store collected discussions idempotently. Returns new/duplicate counts per source.
+ * Precondition: items are unique per (source, external id) — callers pass the
+ * output of dedupeDiscussions(), which merges in-batch duplicates first.
+ */
 export async function ingestDiscussions(
   runId: string,
   items: CollectedDiscussion[],

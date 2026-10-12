@@ -19,7 +19,7 @@ test("overview loads with real numbers and labelled sections @responsive", async
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("What developers are saying");
   await expect(page.getByText(/Reporting week/)).toBeVisible();
-  await expect(page.getByText("Unique discussions")).toBeVisible();
+  await expect(page.getByText(/^Unique discussions/).first()).toBeVisible();
   await expect(page.getByText(/Last successful collection/)).toBeVisible();
   // No horizontal page scroll at any viewport.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -55,7 +55,7 @@ test("discussions have working, traceable source links", async ({ page }) => {
 
 test("explorer filters are applied through the URL", async ({ page }) => {
   await page.goto("/discussions");
-  await page.getByLabel("Source").selectOption("hackernews");
+  await page.locator("select[name=source]").selectOption("hackernews");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect(page).toHaveURL(/source=hackernews/);
   const badges = page.locator("main li").filter({ hasText: "GitHub Issues" });
@@ -107,7 +107,7 @@ test.describe("admin flows", () => {
     await p.goto("/login");
     await p.getByLabel("Passcode").fill("definitely wrong");
     await p.getByRole("button", { name: "Sign in" }).click();
-    await expect(p.getByRole("alert")).toContainText("not correct");
+    await expect(p.getByRole("alert").filter({ hasText: "not correct" })).toBeVisible();
     await ctx.close();
   });
 
@@ -142,4 +142,13 @@ test.describe("admin flows", () => {
     await expect(page.getByText(/Collecting|Analysing|Writing|Starting/)).toBeVisible();
     await expect(page.getByText(/Run finished|Run failed/)).toBeVisible({ timeout: 320_000 });
   });
+});
+
+test("no page scrolls horizontally on a phone @responsive", async ({ page }) => {
+  for (const path of ["/", "/pain-points", "/opportunities", "/discussions", "/reports", "/decisions", "/health", "/settings", "/architecture"]) {
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, path).toBeLessThanOrEqual(1);
+  }
 });

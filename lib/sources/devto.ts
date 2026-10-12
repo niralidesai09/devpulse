@@ -17,14 +17,16 @@ const TAGS = [
   "githubactions",
   "github",
   "git",
-  "productivity",
   "softwareengineering",
-  // "ai" was removed: 1000+ mostly unrelated articles/week truncated the window.
+  // "ai" and "productivity" were removed: thousands of mostly unrelated articles
+  // per week truncated the window (measured 12 Oct 2026).
 ];
 // Busy tags ("ai") publish hundreds of articles a day, so pages are large
 // (the API allows up to 1000) to reach back to the start of the window.
 const PER_PAGE = 1000;
-const MAX_PAGES_PER_TAG = 3;
+// Busiest kept tags ("testing", "devops") reach ~1000 articles per 5 days, so a
+// 3–4 week window needs up to ~6 pages.
+const MAX_PAGES_PER_TAG = 8;
 
 type DevArticle = {
   id: number;

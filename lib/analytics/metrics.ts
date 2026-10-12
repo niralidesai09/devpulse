@@ -8,6 +8,14 @@ import type { MetricRow } from "@/lib/db/discussions";
 import type { SourceRunRow } from "@/lib/db/types";
 import { inPeriod, type Period } from "@/lib/time/periods";
 
+const SOURCE_NAMES: Record<string, string> = {
+  hackernews: "Hacker News",
+  github: "GitHub Issues",
+  stackoverflow: "Stack Overflow",
+  devto: "DEV Community",
+};
+const sourceName = (id: string) => SOURCE_NAMES[id] ?? id;
+
 export type TrendStatus = "new" | "growing" | "stable" | "declining" | "gone" | "insufficient_data";
 
 export type PeriodRef = { start: string; end: string; label: string };
@@ -215,8 +223,8 @@ export function computeReportMetrics(input: {
     }));
   if (excludedFromComparison.length) {
     warnings.push(
-      `Week-on-week changes use only ${comparable.length ? comparable.join(", ") : "no sources"}; ` +
-        excludedFromComparison.map((e) => `${e.sourceId} (${e.reason})`).join("; ") + ".",
+      `Week-on-week changes use only ${comparable.length ? comparable.map(sourceName).join(", ") : "no sources"}; ` +
+        `not compared: ${excludedFromComparison.map((e) => `${sourceName(e.sourceId)} (${e.reason})`).join("; ")}.`,
     );
   }
   const comparableSet = new Set(comparable);

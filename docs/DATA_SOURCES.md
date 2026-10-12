@@ -15,7 +15,7 @@ Shared behaviour (`lib/sources/utils.ts`):
 | **Hacker News** | `hn.algolia.com/api/v1/search_by_date` | none | one request per keyword, stories + comments, `created_at_i` window, up to 1000 hits (Algolia max) | Algolia public API; concurrency 4 | `objectID` | text only |
 | **GitHub Issues** | `api.github.com/search/issues` | `GITHUB_TOKEN` (no scopes) | per topic: up to 6 keywords OR-ed (GitHub max 5 ORs), `in:title is:issue comments:>=1 created:<window>`, 1 page of 100, bot authors filtered in code | 30 search req/min + secondary limits → sequential, 6 s apart, **stop on 403/429** (status partial) | issue `id` | open / closed |
 | **Stack Overflow** | `api.stackexchange.com/2.3/search/advanced` | optional `STACKEXCHANGE_KEY` | page all questions in the window (≤ 12 pages) and match locally (saves quota) | 300 req/day/IP keyless; obeys `backoff`; stops when quota < 10 | `question_id` | accepted answer |
-| **DEV Community** | `dev.to/api/articles/latest?tag=` | none | 9 relevant tags (`ai` dropped: too broad), pages of 1000, ≤ 3 pages until older than the window; match title + description | concurrency 3 | article `id` | text only |
+| **DEV Community** | `dev.to/api/articles/latest?tag=` | none | 8 relevant tags (`ai`, `productivity` dropped: too broad), pages of 1000, ≤ 8 pages until older than the window; match title + description | concurrency 3 | article `id` | text only |
 
 ## Why GitHub is a *sample*, not a census
 

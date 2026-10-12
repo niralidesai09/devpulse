@@ -49,7 +49,9 @@ describe("live database", () => {
       const items = [doc(1), doc(2), doc(3)];
       const first = await ingestDiscussions(run.id, items);
       expect(first.hackernews).toEqual({ inserted: 3, duplicates: 0 });
-      const second = await ingestDiscussions(run.id, [...items, doc(1, { score: 50, matchedKeywords: ["flaky test"] })]);
+      // A later collection sees the same discussions again (engagement changed, new keyword matched).
+      // Within one batch, items are already unique: dedupeDiscussions() runs before ingest.
+      const second = await ingestDiscussions(run.id, [doc(1, { score: 50, matchedKeywords: ["flaky test"] }), doc(2), doc(3)]);
       expect(second.hackernews.inserted).toBe(0);
       const { count } = await getDb().from("discussions").select("id", { count: "exact", head: true }).like("external_id", `${tag}%`);
       expect(count).toBe(3);

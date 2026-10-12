@@ -39,7 +39,7 @@ export function PageHeader({
 }
 
 export function Card({ children, className, as: As = "section" }: { children: ReactNode; className?: string; as?: "section" | "div" | "article" }) {
-  return <As className={cx("rounded-lg border border-border bg-surface shadow-[var(--shadow-sm)]", className)}>{children}</As>;
+  return <As className={cx("min-w-0 rounded-lg border border-border bg-surface shadow-[var(--shadow-sm)]", className)}>{children}</As>;
 }
 
 export function CardHeader({
@@ -111,11 +111,11 @@ const TONES: Record<Tone, string> = {
   info: "bg-info-soft text-info border-transparent",
 };
 
-export function Badge({ children, tone = "neutral", title, className }: { children: ReactNode; tone?: Tone; title?: string; className?: string }) {
+export function Badge({ children, tone = "neutral", title, className, wrap = false }: { children: ReactNode; tone?: Tone; title?: string; className?: string; wrap?: boolean }) {
   return (
     <span
       title={title}
-      className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px] font-medium leading-4", TONES[tone], className)}
+      className={cx("inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium leading-4", wrap ? "whitespace-normal text-left" : "whitespace-nowrap", TONES[tone], className)}
     >
       {children}
     </span>

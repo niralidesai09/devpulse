@@ -108,7 +108,7 @@ export default async function PainPointPage(props: PageProps<"/pain-points/[id]"
         </Card>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader
             title={<span className="inline-flex items-center gap-2">Analysis <AiBadge /></span>}
@@ -219,7 +219,7 @@ export default async function PainPointPage(props: PageProps<"/pain-points/[id]"
       )}
 
       {(workarounds.length > 0 || tools.length > 0) && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader title="Workarounds developers describe" description="Extracted per discussion by the model; open the source to read it in context." />
             <CardBody>

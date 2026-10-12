@@ -21,7 +21,7 @@ import { generateReport } from "./report";
 
 // Leave headroom under the 300 s platform limit.
 const BUDGET_MS = (FUNCTION_MAX_SECONDS - 15) * 1000;
-const REPORT_RESERVE_MS = 75_000; // stop analysis early enough for the brief
+const REPORT_RESERVE_MS = 110_000; // stop starting analysis batches early enough for the brief (a batch in flight can take ~45 s)
 
 /** The scheduled run for a reporting week can happen only once (see collection_runs.idempotency_key). */
 export function cronIdempotencyKey(now = new Date()): string {

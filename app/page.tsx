@@ -199,7 +199,7 @@ export default async function OverviewPage() {
       )}
 
       {hasData && (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
           <Card>
             <CardHeader
               title="Top recurring pain points"
@@ -241,7 +241,7 @@ export default async function OverviewPage() {
       )}
 
       {hasData && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader title="Still unresolved" description="Pain points where most of this week's discussions show no working fix (AI judgement per discussion, counted by code)." />
             <CardBody>
@@ -306,7 +306,7 @@ export default async function OverviewPage() {
       )}
 
       {hasData && (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader title="Discussion volume by week" description={`Unique discussions per reporting week (Fri–Thu ${TZ_LABEL}), by source. Hatched = week in progress.`} />
             <CardBody>
