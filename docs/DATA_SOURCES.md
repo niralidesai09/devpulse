@@ -12,10 +12,14 @@ Shared behaviour (`lib/sources/utils.ts`):
 
 | Source | Endpoint | Auth | Query strategy | Limits we respect | Dedupe id | "Unresolved" signal |
 |---|---|---|---|---|---|---|
-| **Hacker News** | `hn.algolia.com/api/v1/search_by_date` | none | one request per keyword, stories + comments, `created_at_i` window, 300 hits | Algolia public API; concurrency 4 | `objectID` | text only |
-| **GitHub Issues** | `api.github.com/search/issues` | `GITHUB_TOKEN` (no scopes) | per topic: up to 6 keywords OR-ed (GitHub max 5 ORs), `in:title is:issue created:<window>`, bot authors excluded, ≤ 2 pages | 30 search req/min + secondary limits → sequential, 3 s apart, **stop on 403/429** (status partial) | issue `id` | open / closed |
+| **Hacker News** | `hn.algolia.com/api/v1/search_by_date` | none | one request per keyword, stories + comments, `created_at_i` window, up to 1000 hits (Algolia max) | Algolia public API; concurrency 4 | `objectID` | text only |
+| **GitHub Issues** | `api.github.com/search/issues` | `GITHUB_TOKEN` (no scopes) | per topic: up to 6 keywords OR-ed (GitHub max 5 ORs), `in:title is:issue comments:>=1 created:<window>`, 1 page of 100, bot authors filtered in code | 30 search req/min + secondary limits → sequential, 6 s apart, **stop on 403/429** (status partial) | issue `id` | open / closed |
 | **Stack Overflow** | `api.stackexchange.com/2.3/search/advanced` | optional `STACKEXCHANGE_KEY` | page all questions in the window (≤ 12 pages) and match locally (saves quota) | 300 req/day/IP keyless; obeys `backoff`; stops when quota < 10 | `question_id` | accepted answer |
-| **DEV Community** | `dev.to/api/articles/latest?tag=` | none | 10 relevant tags, ≤ 3 pages each until older than the window; match title + description | concurrency 3 | article `id` | text only |
+| **DEV Community** | `dev.to/api/articles/latest?tag=` | none | 9 relevant tags (`ai` dropped: too broad), pages of 1000, ≤ 3 pages until older than the window; match title + description | concurrency 3 | article `id` | text only |
+
+## Why GitHub is a *sample*, not a census
+
+Code-review and CI keywords appear in thousands of GitHub issue titles per week, most of them auto-filed tracker tickets ("Flaky test: X"). On 12 Oct 2026, `"flaky tests" in:title` matched 1,435 issues in three weeks, and still 3,254 for the broader topic query with `comments:>=1`. Paging through that trips GitHub's secondary rate limit. GitHub therefore contributes the 100 newest **discussed** issues per topic query. Its runs are flagged `truncated`, which keeps GitHub out of week-on-week comparisons, but its discussions still count as evidence and in volume.
 
 ## Matching
 

@@ -162,3 +162,44 @@ export async function listPainPointDiscussions(painPointId: string) {
   }[];
   return rows.sort((a, b) => b.discussion.published_at.localeCompare(a.discussion.published_at));
 }
+
+/** Active pain points with discussion counts — input for the merge pass. */
+export async function listMergeCandidates(limit = 120) {
+  const db = getDb();
+  const [pps, counts] = await Promise.all([
+    db.from("pain_points").select("id, title, description, created_at, topic:topics(name)").is("merged_into", null).limit(limit),
+    db.from("discussion_analysis").select("pain_point_id").not("pain_point_id", "is", null).limit(10000),
+  ]);
+  const n = new Map<string, number>();
+  for (const r of (check(counts, "Could not count discussions") ?? []) as { pain_point_id: string }[]) {
+    n.set(r.pain_point_id, (n.get(r.pain_point_id) ?? 0) + 1);
+  }
+  return ((check(pps, "Could not load pain points") ?? []) as unknown as {
+    id: string;
+    title: string;
+    description: string;
+    created_at: string;
+    topic: { name: string } | null;
+  }[]).map((p) => ({
+    id: p.id,
+    title: p.title,
+    description: p.description,
+    topicName: p.topic?.name ?? null,
+    discussions: n.get(p.id) ?? 0,
+    createdAt: p.created_at,
+  }));
+}
+
+/** Apply one merge: move discussions to the survivor, keep merged rows (merged_into) for traceability. */
+export async function applyMerge(plan: { survivorId: string; mergedIds: string[]; title: string; description: string }) {
+  const db = getDb();
+  check(
+    await db.from("discussion_analysis").update({ pain_point_id: plan.survivorId }).in("pain_point_id", plan.mergedIds),
+    "Could not move discussions to the merged pain point",
+  );
+  check(await db.from("pain_points").update({ merged_into: plan.survivorId }).in("id", plan.mergedIds), "Could not mark merged pain points");
+  check(
+    await db.from("pain_points").update({ title: plan.title, description: plan.description }).eq("id", plan.survivorId),
+    "Could not update merged pain point",
+  );
+}

@@ -186,3 +186,10 @@ describe("computeReportMetrics", () => {
     expect(backfilled.retrospective.note).toMatch(/retrieved after that week ended/);
   });
 });
+
+describe("coverage excludes truncated samples", () => {
+  it("a truncated source run does not count as complete coverage", () => {
+    const run = { ...sourceRun("github", series[0].start, now), truncated: true };
+    expect(coveredSources(current, [run]).size).toBe(0);
+  });
+});

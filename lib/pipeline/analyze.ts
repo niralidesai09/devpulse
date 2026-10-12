@@ -14,7 +14,8 @@ import {
   markAnalysisFailed,
   saveAnalyses,
 } from "@/lib/db/discussions";
-import { createPainPoints, painPointsForPrompt, touchPainPoints } from "@/lib/db/painPoints";
+import { proposeMerges } from "@/lib/ai/mergePainPoints";
+import { applyMerge, createPainPoints, listMergeCandidates, painPointsForPrompt, touchPainPoints } from "@/lib/db/painPoints";
 import type { Logger } from "@/lib/log";
 
 export async function runAnalysis(input: {
@@ -65,6 +66,21 @@ export async function runAnalysis(input: {
     toCreate.forEach((g, i) => (g.existingPainPointId = createdIds[i]));
     for (const g of c.groups) await assignPainPoint(g.discussionIds, g.existingPainPointId!);
   }
+  // Stage B2: merge near-duplicate pain points across runs (only when the set changed).
+  let merged = 0;
+  if (newPainPoints > 0 && !shouldStop()) {
+    try {
+      const plans = await proposeMerges(await listMergeCandidates());
+      for (const plan of plans) {
+        await applyMerge(plan);
+        merged += plan.mergedIds.length;
+      }
+      if (merged) log.info("analyze.merged", { merged, groups: plans.length });
+    } catch (err) {
+      warnings.push(`Pain-point merge pass skipped: ${err instanceof Error ? err.message.slice(0, 160) : String(err)}`);
+    }
+  }
+
   const usedPainPoints = [...new Set(out.rows.map((r) => r.pain_point_id).filter((x): x is string => Boolean(x)))];
   await touchPainPoints(usedPainPoints);
 
@@ -76,6 +92,7 @@ export async function runAnalysis(input: {
     failed,
     proposals: out.proposals.length,
     newPainPoints,
+    merged,
     batches: out.batches,
     pendingAfter: remaining.pending,
   });

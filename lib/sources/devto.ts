@@ -19,8 +19,11 @@ const TAGS = [
   "git",
   "productivity",
   "softwareengineering",
-  "ai",
+  // "ai" was removed: 1000+ mostly unrelated articles/week truncated the window.
 ];
+// Busy tags ("ai") publish hundreds of articles a day, so pages are large
+// (the API allows up to 1000) to reach back to the start of the window.
+const PER_PAGE = 1000;
 const MAX_PAGES_PER_TAG = 3;
 
 type DevArticle = {
@@ -46,9 +49,9 @@ export const devToAdapter: SourceAdapter = {
       for (let page = 1; page <= MAX_PAGES_PER_TAG; page++) {
         result.requests++;
         const articles = await fetchJson<DevArticle[]>(
-          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=100&page=${page}`,
+          `https://dev.to/api/articles/latest?tag=${encodeURIComponent(tag)}&per_page=${PER_PAGE}&page=${page}`,
         );
-        let reachedOlder = articles.length < 100;
+        let reachedOlder = articles.length < PER_PAGE;
         for (const a of articles) {
           const published = new Date(a.published_at);
           if (!a.id || !a.url || Number.isNaN(published.getTime())) {

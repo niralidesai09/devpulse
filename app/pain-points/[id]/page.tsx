@@ -4,7 +4,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { connection } from "next/server";
 import { DecisionForm } from "@/components/DecisionForm";
 import { AiBadge, Badge, ButtonLink, Callout, Card, CardBody, CardHeader, ErrorPanel, PageHeader, SourceBadge, SourceLink, Sparkline, Stat, TrendBadge } from "@/components/ui";
@@ -29,6 +29,7 @@ const DECISION_LABEL: Record<string, string> = {
 async function load(id: string) {
   const pp = await getPainPoint(id);
   if (!pp) return null;
+  if (pp.merged_into) return { mergedInto: pp.merged_into } as const;
   const [overview, discussions, decisions, history, topics] = await Promise.all([
     loadOverview(),
     listPainPointDiscussions(id),
@@ -46,6 +47,7 @@ export default async function PainPointPage(props: PageProps<"/pain-points/[id]"
   const [admin, loaded] = await Promise.all([isAdmin(), safeLoad(() => load(id))]);
   if (!loaded.ok) return <ErrorPanel title="Could not load this pain point" error={loaded.error} />;
   if (!loaded.data) notFound();
+  if ("mergedInto" in loaded.data) redirect(`/pain-points/${loaded.data.mergedInto}`);
   const { pp, overview, discussions, decisions, history, topicName } = loaded.data;
   const m = overview.metrics;
   const metric = m.painPoints.find((p) => p.painPointId === id) ?? null;

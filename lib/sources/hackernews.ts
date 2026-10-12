@@ -9,7 +9,9 @@ import { cleanText, excerptAround, matchKeywords } from "@/lib/text";
 import type { CollectedDiscussion, SourceAdapter } from "./types";
 import { emptyResult, fetchJson, mapWithLimit, toUnixSeconds } from "./utils";
 
-const HITS_PER_PAGE = 300;
+// Algolia's maximum. Broad keywords over 3+ weeks can exceed 300, which would
+// silently under-count the oldest week; truncation is still flagged if hit.
+const HITS_PER_PAGE = 1000;
 
 type HnHit = {
   objectID: string;

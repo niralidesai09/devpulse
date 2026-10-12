@@ -180,7 +180,7 @@ const BUTTON: Record<ButtonVariant, string> = {
 
 export function buttonClass(variant: ButtonVariant = "secondary", size: "sm" | "md" = "md") {
   return cx(
-    "inline-flex items-center justify-center gap-1.5 rounded-md border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
     size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3 text-sm",
     BUTTON[variant],
   );

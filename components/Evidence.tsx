@@ -7,6 +7,15 @@ import { fmtDate, sourceLabel } from "@/lib/format";
 import { isSafeHttpUrl } from "@/lib/text";
 import { sourceColorVar } from "@/lib/format";
 
+/** Distinct label: HN comments share their story's title, so show the commenter's own words instead. */
+function chipLabel(d: EvidenceDoc): string {
+  if (d.title.startsWith("Comment on:") && d.excerpt) {
+    const words = d.excerpt.replace(/^…/, "").trim();
+    return `“${words.length > 70 ? words.slice(0, 69) + "…" : words}”`;
+  }
+  return d.title;
+}
+
 export function EvidenceChips({ ids, docs, max = 3 }: { ids: string[]; docs: Map<string, EvidenceDoc>; max?: number }) {
   const list = ids.map((id) => docs.get(id)).filter((d): d is EvidenceDoc => Boolean(d));
   if (!list.length) return <span className="text-xs text-text-3">No linked evidence</span>;
@@ -17,10 +26,10 @@ export function EvidenceChips({ ids, docs, max = 3 }: { ids: string[]; docs: Map
           <span aria-hidden className="size-1.5 shrink-0 rounded-full" style={{ background: sourceColorVar(d.source_id) }} />
           {isSafeHttpUrl(d.url) ? (
             <a href={d.url} target="_blank" rel="noopener noreferrer nofollow" className="truncate hover:text-text hover:underline" title={`${d.title} — ${sourceLabel(d.source_id)}, ${fmtDate(d.published_at)} (opens original)`}>
-              {d.title}
+              {chipLabel(d)}
             </a>
           ) : (
-            <span className="truncate">{d.title}</span>
+            <span className="truncate">{chipLabel(d)}</span>
           )}
           {d.is_excluded && <span className="text-warn" title="Excluded by the PM after this report was generated">(excluded)</span>}
           <Link href={`/discussions/${d.id}`} className="shrink-0 text-text-3 hover:text-text" title="Why the AI classified it this way">

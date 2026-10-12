@@ -102,3 +102,25 @@ describe("fallbackGroups (consolidation without the model)", () => {
     expect(g[0].title).toBe("Flaky tests block merges");
   });
 });
+
+import { planMerges } from "@/lib/ai/mergePainPoints";
+
+describe("planMerges (pain point merge validation)", () => {
+  const c = (id: string, discussions: number, createdAt = "2026-10-01") => ({ id, title: id, description: id, topicName: null, discussions, createdAt });
+  const cands = [c("a", 1), c("b", 5), c("c", 2), c("d", 1)];
+  it("keeps the busiest member as survivor and uses the model's canonical title", () => {
+    const plans = planMerges(cands, { merges: [{ members: ["K1", "K2"], title: "Merged", description: "D", reason: "" }] });
+    expect(plans).toEqual([{ survivorId: "b", mergedIds: ["a"], title: "Merged", description: "D" }]);
+  });
+  it("ignores unknown keys, single-member groups and reuse of a pain point in two groups", () => {
+    const plans = planMerges(cands, {
+      merges: [
+        { members: ["K9", "K1"], title: "x", description: "", reason: "" },
+        { members: ["K3", "K4"], title: "y", description: "", reason: "" },
+        { members: ["k4", "K2"], title: "z", description: "", reason: "" },
+      ],
+    });
+    expect(plans).toHaveLength(1);
+    expect(plans[0]).toMatchObject({ survivorId: "c", mergedIds: ["d"] });
+  });
+});

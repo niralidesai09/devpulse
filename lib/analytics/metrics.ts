@@ -163,11 +163,16 @@ export function signalScore(input: {
   return { score: Math.round(score * 100), components };
 }
 
-/** Sources with a usable collection whose window fully covered the period. */
+/**
+ * Sources with a complete collection covering the period: status succeeded
+ * or partial, window spans the whole period, and results NOT truncated (a
+ * truncated source returned only a sample, so its counts are not comparable).
+ */
 export function coveredSources(period: Pick<Period, "start" | "end">, sourceRuns: SourceRunRow[]): Set<string> {
   const out = new Set<string>();
   for (const r of sourceRuns) {
     if (r.status !== "succeeded" && r.status !== "partial") continue;
+    if (r.truncated) continue;
     if (!r.window_start || !r.window_end) continue;
     if (new Date(r.window_start) <= period.start && new Date(r.window_end) >= period.end) out.add(r.source_id);
   }
@@ -203,10 +208,10 @@ export function computeReportMetrics(input: {
     .map((s) => ({
       sourceId: s,
       reason: !covCurrent.has(s) && !covPrevious.has(s)
-        ? "no successful collection covered either week"
+        ? "no complete (untruncated) collection covered either week"
         : !covCurrent.has(s)
-          ? "no successful collection covered the current week"
-          : "no successful collection covered the previous week",
+          ? "no complete (untruncated) collection covered the current week"
+          : "no complete (untruncated) collection covered the previous week",
     }));
   if (excludedFromComparison.length) {
     warnings.push(

@@ -24,7 +24,7 @@ See [COMPONENTS_MAP.md](COMPONENTS_MAP.md) for the diagram.
 3. **Normalise + dedupe** (`dedupeDiscussions`): primary key `(source, external id)`, secondary key normalised URL; keywords/topics merged so a post matching several keywords counts once.
 4. **Ingest** (`ingest_discussions()` SQL function): inserts new discussions; for known ones refreshes engagement, `last_retrieved_at` and merges keywords. Returns new vs duplicate counts per source. Idempotent.
 5. **Analyse** (`runAnalysis`, Gemini Stage A): up to `MAX_ANALYZE_PER_RUN` pending/failed discussions, newest first, 20 per call, 3 calls in parallel. Stops starting new batches when the time budget runs low; the rest stay `pending`. Failed batches increment `analysis_attempts` (max 3) and keep raw data.
-6. **Consolidate** (Gemini Stage B): new pain-point proposals are mapped to existing pain points or merged into new canonical ones. Validated; falls back to exact-title grouping.
+6. **Consolidate** (Gemini Stage B): new pain-point proposals are mapped to existing pain points or merged into new canonical ones. Validated; falls back to exact-title grouping. **Stage B2** then reviews all active pain points and merges near-duplicates across runs (`merged_into`; discussions reassigned; old links redirect).
 7. **Metrics** (`computeReportMetrics`, code only).
 8. **Brief** (Gemini Stage C): evidence pack → schema-validated JSON → grounding (key mapping, dropping unsupported claims, numeric check).
 9. **Store + deliver**: report + snapshot + evidence rows; Resend email if configured.
@@ -51,7 +51,7 @@ Run status: `succeeded` (everything worked), `partial` (data stored but a source
 
 ## Week-on-week rules (`lib/analytics/metrics.ts`)
 
-- **Like-for-like sources:** a source counts in comparisons only if a successful (or partial) collection window fully covered **both** weeks. Others are listed under "excluded from comparison" with the reason.
+- **Like-for-like sources:** a source counts in comparisons only if a successful (or partial) and **untruncated** collection window fully covered **both** weeks. A truncated source returned only a sample, so its counts are not comparable. Others are listed under "excluded from comparison" with the reason.
 - `pctChange = round((current − previous) / previous × 100)`, **null when previous = 0** (shown as "New", no percentage).
 - **Trend labels:** `new` (0 → n), `gone` (n → 0), `insufficient_data` (fewer than 4 discussions across both weeks), `growing` (≥ +2 and ≥ +25%), `declining` (≤ −2 and ≤ −25%), else `stable`.
 - **Backfill disclosure:** if most previous-week discussions were first retrieved after that week ended, the report says the comparison relies on retrospective collection.

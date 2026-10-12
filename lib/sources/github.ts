@@ -14,9 +14,11 @@ import type { CollectedDiscussion, SourceAdapter } from "./types";
 import { emptyResult, fetchJson, HttpError } from "./utils";
 
 const MAX_KEYWORDS_PER_QUERY = 6;
-const GAP_MS = 3000;
-const MAX_PAGES = 2; // 200 issues per query at most
-const EXCLUDE_BOTS = "-author:app/github-actions -author:app/dependabot -author:app/renovate -author:app/coderabbitai";
+const GAP_MS = 6000; // measured: 3 s still tripped the secondary limit after 2 queries
+// One page per query: deeper pages of very large result sets are what trip
+// GitHub's secondary limit. Larger result sets are flagged as truncated, which
+// keeps GitHub out of week-on-week comparisons (it is a sample, not a census).
+const MAX_PAGES = 1;
 
 type GhIssue = {
   id: number;
@@ -46,7 +48,9 @@ export function buildGithubQueries(
         .slice(i, i + MAX_KEYWORDS_PER_QUERY)
         .map((k) => `"${k.replace(/"/g, "")}"`)
         .join(" OR ");
-      queries.push(`(${terms}) in:title is:issue created:${range} ${EXCLUDE_BOTS}`);
+      // comments:>=1 keeps issues people actually discussed (drops auto-filed
+      // per-test tracker tickets); bots are filtered in code (simpler query).
+      queries.push(`(${terms}) in:title is:issue comments:>=1 created:${range}`);
     }
   }
   return queries;
@@ -121,8 +125,7 @@ export const githubAdapter: SourceAdapter = {
           });
         }
 
-        const fetchedSoFar = page * 100;
-        if (data.total_count <= fetchedSoFar) break;
+        if (data.total_count <= page * 100) break;
         if (page === MAX_PAGES) result.truncated = true;
       }
       if (blocked) {
