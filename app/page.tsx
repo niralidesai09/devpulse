@@ -1,9 +1,11 @@
 // Overview: the week's decision in one screen.
 //   1. Heading, reporting period, freshness and source health (+ Run now)
 //   2. Four-figure ledger (real, defined figures only)
-//   3. The lead problem (largest) and the ranked top three opportunities
-//   4. What is moving: HN keyword chart + new / accelerating topics
-//   5. The Friday brief, exactly as emailed
+//   3. Sumit's three questions, answered side by side (the exam brief):
+//      most-discussed pain points · up or down vs last week · unresolved
+//   4. The lead problem (largest) and the ranked top three opportunities
+//   5. What is moving: HN keyword chart + topics not yet monitored
+//   6. The Friday brief, exactly as emailed
 
 import { connection } from "next/server";
 import Link from "next/link";
@@ -71,16 +73,17 @@ export default async function OverviewPage() {
 
       <Ledger dashboard={dashboard} pendingSuggestions={suggestions.pending.length} />
 
+      {ranked.length > 0 && <ThreeQuestions topics={topics} suggestions={suggestions.pending} previousComparable={!!dashboard.previousComparable} />}
+
       {lead ? (
         // Same 4-column armature as the ledger: the lead spans 3 columns and
         // the side column sits under the ledger's 4th, sharing its rule.
-        <div className="-mt-8 grid grid-cols-[minmax(0,1fr)] gap-y-10 xl:grid-cols-4">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-y-10 border-t border-line xl:grid-cols-4">
           <div className="min-w-0 pt-8 xl:col-span-3 xl:pr-10">
             <LeadProblem topic={lead} />
           </div>
           <aside className="min-w-0 space-y-7 pt-8 xl:border-l xl:border-line xl:pl-4">
             <TopOpportunities topics={ranked.slice(0, 3)} />
-            <MovingNow topics={topics} />
           </aside>
         </div>
       ) : (
@@ -311,41 +314,6 @@ function TopOpportunities({ topics }: { topics: TopicCard[] }) {
   );
 }
 
-/** First-viewport summary of movement: lifecycle states from HN keyword matches. */
-function MovingNow({ topics }: { topics: TopicCard[] }) {
-  const order: Record<string, number> = { new: 0, up: 1, down: 2, flat: 3 };
-  const comparable = topics.filter((t) => t.trend in order).sort((a, b) => order[a.trend] - order[b.trend] || (b.changePct ?? 0) - (a.changePct ?? 0));
-  const tooFew = topics.filter((t) => t.trend === "low_data" || t.trend === "no_data").length;
-  return (
-    <Section
-      title="Moving this week"
-      description={
-        <>
-          Hacker News keyword matches. {tooFew} {tooFew === 1 ? "topic has" : "topics have"} too few to compare.{" "}
-          <TextLink href="#moving">Full chart</TextLink>
-        </>
-      }
-    >
-      {comparable.length ? (
-        <ul className="divide-y divide-line border-y border-line">
-          {comparable.slice(0, 5).map((t) => (
-            <li key={t.topicId} className="flex items-baseline justify-between gap-3 py-2 text-[13px]">
-              <Link href={`/opportunities#topic-${t.topicId}`} className="min-w-0 truncate font-medium text-ink hover:underline" title={t.name}>
-                {t.name}
-              </Link>
-              <span className="shrink-0 text-[12.5px]">
-                <LifecycleState trend={t.trend} changePct={t.changePct} thisWeek={t.keywordsThisWeek} lastWeek={t.keywordsLastWeek} />
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[13px] text-ink-2">No topic has enough matches to call a direction.</p>
-      )}
-    </Section>
-  );
-}
-
 /** Full week-over-week chart + suggestions not yet monitored, on the same armature. */
 function Moving({ topics, suggestions }: { topics: TopicCard[]; suggestions: { id: string; name: string; postCount: number }[] }) {
   return (
@@ -404,5 +372,149 @@ function Moving({ topics, suggestions }: { topics: TopicCard[]; suggestions: { i
         </p>
       </Section>
     </div>
+  );
+}
+
+/**
+ * The three questions the Friday brief must answer, each answered from the
+ * stored figures (no AI text here):
+ *   1. Which pain points surface most often (mentions, all four sources)
+ *   2. Up or down vs last week (Hacker News keyword matches, the only
+ *      like-for-like weekly count until a comparable previous run exists)
+ *   3. Which problems look unresolved or underserved by existing tools
+ */
+function ThreeQuestions({
+  topics,
+  suggestions,
+  previousComparable,
+}: {
+  topics: TopicCard[];
+  suggestions: { id: string; name: string; postCount: number }[];
+  previousComparable: boolean;
+}) {
+  const byMentions = [...topics].filter((t) => t.mentions > 0).sort((a, b) => b.mentions - a.mentions);
+  const maxMentions = byMentions[0]?.mentions ?? 0;
+  const order: Record<string, number> = { new: 0, up: 1, flat: 2, down: 3 };
+  const moving = topics.filter((t) => t.trend in order).sort((a, b) => order[a.trend] - order[b.trend] || (b.changePct ?? 0) - (a.changePct ?? 0));
+  const tooFew = topics.filter((t) => !(t.trend in order));
+  const unresolved = [...topics].filter((t) => t.unresolvedCount > 0).sort((a, b) => b.unresolvedCount - a.unresolvedCount || b.unresolvedPct - a.unresolvedPct);
+
+  return (
+    <section aria-labelledby="questions-heading">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+        <h2 id="questions-heading" className="font-serif text-[22px] leading-snug font-semibold tracking-[-0.01em]">
+          This week in three answers
+        </h2>
+        <p className="text-[12.5px] text-ink-3">Counted from the collected discussions. No AI wording in this section.</p>
+      </div>
+
+      <ol className="mt-4 grid grid-cols-[minmax(0,1fr)] border-y border-line lg:grid-cols-3">
+        <Question n={1} title="What is surfacing most often?" caption="Relevant discussions per topic, all four sources." first>
+          <ul className="space-y-2.5">
+            {byMentions.slice(0, 6).map((t) => (
+              <li key={t.topicId}>
+                <div className="flex items-baseline justify-between gap-3 text-[13.5px]">
+                  <Link href={`/evidence?topic=${t.topicId}`} className="min-w-0 font-medium text-ink hover:underline">
+                    {t.name}
+                  </Link>
+                  <span className="tabular shrink-0 font-mono text-[13px] text-ink">{t.mentions}</span>
+                </div>
+                <div className="mt-1">
+                  <ShareBar value={maxMentions ? t.mentions / maxMentions : 0} label={`${t.mentions} discussions`} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          {byMentions.length > 6 && <p className="mt-3 text-[12.5px] text-ink-3">+{byMentions.length - 6} more on Evidence</p>}
+          <p className="mt-3">
+            <TextLink href="/evidence">Read the discussions</TextLink>
+          </p>
+        </Question>
+
+        <Question
+          n={2}
+          title="Trending up or down?"
+          caption={
+            previousComparable
+              ? "Hacker News keyword matches, this week vs the 7 days before."
+              : "Hacker News keyword matches, this week vs the 7 days before (the only source with a fair weekly count so far)."
+          }
+        >
+          {moving.length ? (
+            <ul className="divide-y divide-line">
+              {moving.slice(0, 6).map((t) => (
+                <li key={t.topicId} className="py-2 first:pt-0">
+                  <Link href={`/trends`} className="block text-[13.5px] font-medium text-ink hover:underline">
+                    {t.name}
+                  </Link>
+                  <span className="mt-0.5 block text-[12.5px]">
+                    <LifecycleState trend={t.trend} changePct={t.changePct} thisWeek={t.keywordsThisWeek} lastWeek={t.keywordsLastWeek} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[13px] text-ink-2">No topic has enough matches to call a direction yet.</p>
+          )}
+          {tooFew.length > 0 && (
+            <p className="mt-3 text-[12.5px] text-ink-3">
+              Too few to compare: {tooFew.map((t) => t.name).join(", ")}.
+            </p>
+          )}
+          <p className="mt-3">
+            <TextLink href="/trends">See the trend charts</TextLink>
+          </p>
+        </Question>
+
+        <Question n={3} title="What is still unresolved?" caption="Discussions with no working fix, judged from source signals (open issue, no accepted answer).">
+          <ul className="space-y-2.5">
+            {unresolved.slice(0, 5).map((t) => (
+              <li key={t.topicId}>
+                <div className="flex items-baseline justify-between gap-3 text-[13.5px]">
+                  <Link href={`/evidence?topic=${t.topicId}&status=unresolved`} className="min-w-0 font-medium text-ink hover:underline">
+                    {t.name}
+                  </Link>
+                  <span className="tabular shrink-0 text-[12.5px] text-ink-2">
+                    <span className="font-mono text-[13px] text-ink">{t.unresolvedCount}</span> of {t.mentions}
+                  </span>
+                </div>
+                <div className="mt-1">
+                  <ShareBar value={t.unresolvedPct / 100} label={`${t.unresolvedPct}% unresolved`} />
+                </div>
+              </li>
+            ))}
+          </ul>
+          {suggestions.length > 0 && (
+            <div className="mt-4 border-t border-line pt-3">
+              <p className="text-[12.5px] font-medium text-ink-2">Underserved, not yet monitored</p>
+              <ul className="mt-1 space-y-0.5 text-[13px]">
+                {suggestions.slice(0, 3).map((s) => (
+                  <li key={s.id}>
+                    <Link href="/opportunities#radar" className="text-ink hover:underline">
+                      {s.name}
+                    </Link>{" "}
+                    <span className="tabular text-[12.5px] text-ink-3">· {plural(s.postCount, "thread")}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="mt-3">
+            <TextLink href="/evidence?status=unresolved">Unresolved discussions</TextLink>
+          </p>
+        </Question>
+      </ol>
+    </section>
+  );
+}
+
+function Question({ n, title, caption, first = false, children }: { n: number; title: string; caption: string; first?: boolean; children: React.ReactNode }) {
+  return (
+    <li className={`min-w-0 py-5 lg:px-5 ${first ? "lg:pl-0" : "border-t border-line lg:border-t-0 lg:border-l"} lg:last:pr-0`}>
+      <p className="tabular font-mono text-[11.5px] tracking-[0.06em] text-accent">0{n}</p>
+      <h3 className="mt-1 font-serif text-[18px] leading-snug font-semibold text-ink">{title}</h3>
+      <p className="mt-1 mb-4 text-[12.5px] leading-snug text-ink-3">{caption}</p>
+      {children}
+    </li>
   );
 }

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "verify:provenance": "node --env-file=.env.local scripts/verify-provenance.mjs"
+    "verify:provenance": "node --env-file=.env.local scripts/verify-provenance.mjs",
+    "build:map": "node scripts/build-components-map.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.28.0",

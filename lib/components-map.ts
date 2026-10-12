@@ -53,8 +53,13 @@ export const COMPONENT_GROUPS: { title: string; items: Component[] }[] = [
     items: [
       { name: "Database", file: "supabase/migrations/*.sql, lib/db/*", does: "topics, runs, posts (+ full-text index), topic_stats, briefs, suggested_topics. RLS: public read-only; writes only with the service-role key on the server.", service: "Supabase Postgres" },
       { name: "Email", file: "lib/email/brief-email.ts", does: "Sends the brief as HTML + text to BRIEF_TO_EMAIL; stores emailed_at or the error.", service: "Resend" },
-      { name: "Dashboard", file: "app/page.tsx, components/*", does: "KPIs, ranked topics with 'Why this score?', trend chart, radar, competitors, objections, Ask, brief.", service: "Next.js on Vercel, Recharts" },
-      { name: "Topics, Runs, Architecture pages", file: "app/topics, app/runs, app/architecture", does: "Edit monitored topics, see run history per source, explain the system.", service: "Next.js on Vercel" },
+      { name: "App shell", file: "app/layout.tsx, components/shell/*", does: "Sidebar navigation (drawer on mobile) with data freshness and the next scheduled run.", service: "Next.js on Vercel" },
+      { name: "Overview", file: "app/page.tsx", does: "Key figures, the brief's three answers (most discussed, trending up or down, unresolved), the lead problem with evidence, top opportunities, week-over-week chart, the Friday brief.", service: "Next.js on Vercel, Recharts" },
+      { name: "Trends", file: "app/trends/page.tsx, components/charts.tsx", does: "Weekly volume, mentions by topic, Hacker News keyword trend, resolved vs unresolved, source contribution; every chart has a table view.", service: "Next.js on Vercel, Recharts" },
+      { name: "Opportunities", file: "app/opportunities/page.tsx", does: "Ranked topics: observed facts, labelled AI note, 'Why this score?', evidence, emerging radar, competitor and objection radar.", service: "Next.js on Vercel" },
+      { name: "Evidence", file: "app/evidence/page.tsx, lib/db/evidence.ts", does: "Searchable, filterable feed of every collected discussion with source, published and retrieved times.", service: "Next.js on Vercel, Supabase" },
+      { name: "Ask", file: "app/ask/page.tsx, components/ask-pulse.tsx", does: "Ask the Pulse chat, answered only from stored posts with citations.", service: "Next.js on Vercel, Gemini Flash" },
+      { name: "Topics, Runs, How it works", file: "app/topics, app/runs, app/architecture", does: "Edit monitored topics (stored in Supabase), see run history per source, explain the system and download this map.", service: "Next.js on Vercel" },
     ],
   },
 ];

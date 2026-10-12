@@ -4,9 +4,32 @@
 
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
+import { Download } from "lucide-react";
 import { COMPONENT_GROUPS } from "@/lib/components-map";
 
 export const metadata: Metadata = { title: "How it works" };
+
+function MapDownloads() {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <a
+        href="/groundswell-components-map.pdf"
+        download
+        className="inline-flex h-9 items-center gap-2 rounded-md bg-accent px-3.5 text-[13px] font-medium text-accent-ink hover:opacity-90"
+      >
+        <Download aria-hidden size={15} strokeWidth={1.75} />
+        Components Map (PDF)
+      </a>
+      <a
+        href="/groundswell-components-map.md"
+        download
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-line-strong px-3 text-[13px] text-ink-2 hover:bg-surface-2 hover:text-ink"
+      >
+        Markdown
+      </a>
+    </div>
+  );
+}
 
 export default function ArchitecturePage() {
   return (
@@ -20,6 +43,7 @@ export default function ArchitecturePage() {
             Opportunity Score in code, and emails an evidence-linked brief before the engineering sync.
           </p>
         }
+        actions={<MapDownloads />}
       />
 
       <figure className="mt-6 rounded-md border border-line bg-surface p-3 sm:p-4">
@@ -27,7 +51,7 @@ export default function ArchitecturePage() {
           <Diagram />
         </div>
         <figcaption className="mt-2 text-xs text-ink-3">
-          Arrows show data flow. Blue boxes are the only places AI is used; numbers, trends and scores are computed by code.
+          Arrows show data flow. Green AI boxes are the only places AI is used; numbers, trends and scores are computed by code.
         </figcaption>
       </figure>
 
@@ -60,7 +84,10 @@ export default function ArchitecturePage() {
         <h2 id="components-heading" className="text-sm font-semibold">
           Components map
         </h2>
-        <p className="mt-0.5 text-xs text-ink-3">Every component, what it does, and the service it uses</p>
+        <div className="mt-0.5 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-ink-3">Every component, what it does, and the service it uses</p>
+          <MapDownloads />
+        </div>
         <div className="mt-3 space-y-6">
           {COMPONENT_GROUPS.map((group) => (
             <div key={group.title}>

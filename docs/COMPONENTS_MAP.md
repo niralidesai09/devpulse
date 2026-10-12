@@ -1,7 +1,8 @@
 # Groundswell: Components Map
 
-**Live app:** https://devpulse-sable-seven.vercel.app · **Diagram:** https://devpulse-sable-seven.vercel.app/architecture
-**Repository:** https://github.com/niralidesai09/devpulse (branch `roadmap`)
+**Live app:** https://devpulse-sable-seven.vercel.app · **Diagram:** https://devpulse-sable-seven.vercel.app/architecture  
+**Repository:** https://github.com/niralidesai09/devpulse (branch `roadmap`)  
+**Download:** https://devpulse-sable-seven.vercel.app/groundswell-components-map.pdf
 
 Groundswell is a weekly developer-community intelligence digest for Sumit, the PM of a code review automation startup.
 Every Friday at 08:00 IST it collects live discussions, analyses them with **Google Gemini Flash**, and emails an evidence-linked brief.
@@ -66,10 +67,15 @@ Dashboard (Next.js on Vercel) reads Supabase  ·  Ask the Pulse: question → /a
 |---|---|---|---|
 | Database | `supabase/migrations/*.sql`, `lib/db/*` | `topics`, `runs`, `posts` (+ full-text index), `topic_stats`, `briefs`, `suggested_topics`. RLS on: public read-only; writes only on the server with the service-role key. | Supabase Postgres |
 | Email | `lib/email/brief-email.ts` | Sends the brief (HTML + text) from `onboarding@resend.dev` to `BRIEF_TO_EMAIL`; stores `emailed_at` or the error. | Resend |
-| Dashboard `/` | `app/page.tsx`, `components/*` | KPIs, topics ranked by score with "Why this score?", week-over-week chart, emerging radar, competitor & objection radar, Ask the Pulse, brief. | Next.js on Vercel, Recharts |
+| App shell | `app/layout.tsx`, `components/shell/*` | Sidebar navigation (drawer on mobile), data freshness and the next scheduled run. | Next.js on Vercel |
+| Overview `/` | `app/page.tsx` | Key figures; the brief's three answers (most discussed with counts, trending up or down vs last week, unresolved / underserved); the lead problem with evidence; top opportunities; week-over-week chart; the Friday brief. | Next.js on Vercel, Recharts |
+| Trends `/trends` | `app/trends/page.tsx`, `components/charts.tsx` | Weekly volume, mentions by topic, Hacker News keyword trend, resolved vs unresolved, source contribution; every chart has a table view. | Next.js on Vercel, Recharts |
+| Opportunities `/opportunities` | `app/opportunities/page.tsx` | Ranked topics: observed facts, labelled AI note, "Why this score?", evidence; Emerging Topic Radar; competitor and objection radar. | Next.js on Vercel |
+| Evidence `/evidence` | `app/evidence/page.tsx`, `lib/db/evidence.ts` | Searchable, filterable feed of collected discussions with source, published and retrieved times. | Next.js on Vercel, Supabase |
+| Ask `/ask` | `app/ask/page.tsx`, `components/ask-pulse.tsx` | Ask the Pulse chat with citations. | Next.js on Vercel, Gemini Flash |
 | `/topics` | `app/topics/page.tsx` | Add / edit / pause topics and keywords (passcode). | Next.js on Vercel |
 | `/runs` | `app/runs/page.tsx` | Run history with per-source status, brief and email status. | Next.js on Vercel |
-| `/architecture` | `app/architecture/page.tsx` | This map plus the diagram. | Next.js on Vercel |
+| How it works `/architecture` | `app/architecture/page.tsx` | This map, the diagram, and download links (PDF / Markdown). | Next.js on Vercel |
 
 ### Quality checks
 | Component | File | What it does | Service |
