@@ -1,6 +1,6 @@
 "use client";
 // "Ask the Pulse": a small chat. Each question is answered by Gemini using
-// ONLY posts DevPulse has stored (found with Postgres full-text search),
+// ONLY posts Groundswell has stored (found with Postgres full-text search),
 // with numbered links to the real threads. "Not enough data" otherwise.
 
 import { useState } from "react";
@@ -46,7 +46,7 @@ export function AskPulse() {
       <h2 id="ask-heading" className="text-sm font-semibold">
         Ask the Pulse
       </h2>
-      <p className="mt-0.5 text-xs text-ink-3">Answers come only from posts DevPulse has collected, with links to every source.</p>
+      <p className="mt-0.5 text-xs text-ink-3">Answers come only from posts Groundswell has collected, with links to every source.</p>
 
       <form
         className="mt-3 flex flex-col gap-2 sm:flex-row"

@@ -1,6 +1,7 @@
 @AGENTS.md
 
-# Project: DevPulse — Weekly Developer Community Intelligence Digest
+# Project: Groundswell (formerly DevPulse) — Weekly Developer Community Intelligence Digest
+Tagline: "Catch developer pain before it peaks." (Renamed 2026-10-12; repo, Vercel project and URLs keep the name "devpulse".)
 
 ## User
 Sumit, sole PM at a 15-person startup making a code review automation tool for mid-size engineering teams. Every Friday morning he needs a brief of what developers are discussing about code review, CI/CD automation and developer workflow, before his afternoon engineering sync.
@@ -210,4 +211,10 @@ Gemini clusters posts that don't fit existing topics into suggested topics (keyw
 - Ask the Pulse: `lib/ai/ask.ts` `askThePulse(q)` → `search_posts` (12) → none ⇒ "Not enough data" without calling Gemini; else Gemini (posts S1..S12 only, Zod `{enough_data, answer}`) → code turns `[S#]` into links, strips URLs Gemini typed, unknown ids dropped; no valid citation ⇒ "not enough data". `POST /api/ask` public, Zod 3–300 chars, 8/min per IP (in-memory). `components/ask-pulse.tsx` client chat with example questions; nav "Ask" → `/#ask`.
 - Verified live: "Why do teams turn off AI code review bots?" → answer cites the real GitHub thread (its "28 … failures" numbers checked against the stored snippet); "best pizza topping in Naples?" → search found 6 loose matches but Gemini said not enough data; "hi" → 400. Full local run (117s, 9 topics now): 67 kept, 3 objections stored with evidence, email sent. Security advisor: only INFO for the v2 session's server-only tables.
 
-**Next:** Step 11 (not started).
+### Step 11 — Submission pack ✅ (2026-10-12)
+- Renamed the app to **Groundswell** (user's choice): header + tagline, page titles, brief heading/footer, email sender name/footer/subject, Ask copy, User-Agent "Groundswell/1.0". Kept on purpose: admin cookie name/HMAC label (changing logs users out), "Ask the Pulse" feature name, repo/Vercel names.
+- `/architecture` (`app/architecture/page.tsx`, static): themed inline-SVG diagram (triggers → 4 sources → 6-step pipeline → Supabase / Resend inbox / dashboard, plus the Ask the Pulse path; legend: Gemini / external / our code / database), step-by-step run, exam-rules checklist, and the Components Map rendered from `lib/components-map.ts`. Nav: "How it works".
+- `docs/COMPONENTS_MAP.md`, `README.md` (what it does, live URL, setup, env vars, cron), `VIVA.md` (3-minute demo script + 25 Q&As).
+- Final checks: (1) "anthropic|claude" in app/, lib/, components/, supabase/, package.json, package-lock.json, vercel.json, next.config.ts → **0**; only AI dependency `@google/genai`, imported only by `lib/ai/gemini.ts` (CLAUDE.md is the coding assistant's notes, not app code). (2) mock|fake|dummy|lorem|faker|fixture in app code → only the sentence "nothing is mocked"; sources are the 4 live API hosts. (3) Secrets: every value from .env.local searched in the full history of all branches (17 commits) → 0; key-shaped patterns → 0; only `.env.example` ever committed. (4) Production run + live pages checked after deploy (see below).
+
+**All roadmap steps complete.**

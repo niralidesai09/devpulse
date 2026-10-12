@@ -1,5 +1,5 @@
 // "Ask the Pulse": Sumit asks a question in plain English and gets an
-// answer built ONLY from posts DevPulse has stored.
+// answer built ONLY from posts Groundswell has stored.
 //
 //   1. Postgres full-text search (search_posts) finds the most relevant posts.
 //   2. No matches -> "not enough data" straight away (Gemini isn't called).
@@ -18,7 +18,7 @@ const MAX_POSTS = 12;
 export type Citation = { ref: string; title: string; url: string; source: string };
 export type AskResult = { enoughData: boolean; answer: string; citations: Citation[]; postsFound: number };
 
-const NOT_ENOUGH = "Not enough data: DevPulse hasn't stored posts that answer this. Try different words, or add a topic for it.";
+const NOT_ENOUGH = "Not enough data: Groundswell hasn't stored posts that answer this. Try different words, or add a topic for it.";
 
 const AnswerSchema = z.object({
   enough_data: z.boolean().describe("false if the posts don't contain an answer to the question"),

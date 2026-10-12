@@ -1,4 +1,4 @@
-// /topics: the categories and keywords DevPulse monitors, stored in Supabase.
+// /topics: the categories and keywords Groundswell monitors, stored in Supabase.
 // Anyone can view them; adding, editing and pausing needs ADMIN_PASSCODE.
 // Changes apply from the next run: no code changes, no redeploy.
 

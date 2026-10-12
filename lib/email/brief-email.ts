@@ -11,7 +11,7 @@ import { Resend } from "resend";
 import { createServerClient } from "@/lib/db/supabase";
 import { markdownToHtml } from "@/lib/markdown";
 
-const FROM = "DevPulse <onboarding@resend.dev>";
+const FROM = "Groundswell <onboarding@resend.dev>";
 
 /** Wrap the brief HTML in an email-safe page. */
 export function briefEmailHtml(markdown: string): string {
@@ -37,13 +37,13 @@ export function briefEmailHtml(markdown: string): string {
   .foot { color:#8c959f; font-size:12px; text-align:center; margin-top:14px; font-family:Arial,sans-serif; }
 </style></head>
 <body><div class="wrap"><div class="card">${body}</div>
-<div class="foot">DevPulse · weekly developer community intelligence</div></div></body></html>`;
+<div class="foot">Groundswell · catch developer pain before it peaks</div></div></body></html>`;
 }
 
-/** First line of the brief ("# DevPulse Friday Brief — …") as the subject. */
+/** First line of the brief ("# Groundswell Friday Brief — …") as the subject. */
 function subjectFrom(markdown: string): string {
   const firstHeading = markdown.split("\n").find((l) => l.startsWith("# "));
-  return firstHeading ? firstHeading.replace(/^#\s+/, "") : "DevPulse Friday Brief";
+  return firstHeading ? firstHeading.replace(/^#\s+/, "") : "Groundswell Friday Brief";
 }
 
 /** Send a saved brief by id. Never throws: returns { ok, error }. */

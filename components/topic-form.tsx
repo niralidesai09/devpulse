@@ -1,6 +1,6 @@
 "use client";
 // Add / edit a monitored topic. Saved straight to Supabase by a Server
-// Action, so Sumit can change what DevPulse watches without code changes.
+// Action, so Sumit can change what Groundswell watches without code changes.
 
 import { useActionState } from "react";
 import { saveTopicAction } from "@/app/actions";

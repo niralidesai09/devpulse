@@ -4,7 +4,7 @@
 import type { SourceAdapter, SourceName, SourceResult, SourcePost, TopicInput } from "./types";
 
 const TIMEOUT_MS = 10_000; // 10 seconds per request
-const USER_AGENT = "DevPulse/1.0";
+const USER_AGENT = "Groundswell/1.0";
 
 /**
  * GET a URL and parse JSON. Gives up after 10s, and retries ONCE on any

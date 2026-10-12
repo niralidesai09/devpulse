@@ -1,4 +1,4 @@
-// Supabase clients for DevPulse.
+// Supabase clients for Groundswell.
 //
 // There are TWO ways to talk to the database, with different powers:
 //
